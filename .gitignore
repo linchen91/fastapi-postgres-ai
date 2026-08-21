@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.omo/
+.vscode/
+.env
+*.db
