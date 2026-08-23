@@ -27,3 +27,7 @@ class UserOut(UserBase):
 
     class Config:
         from_attributes = True
+
+class LoginRequest(BaseModel):
+    account: str
+    password: str
