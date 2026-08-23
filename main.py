@@ -1,12 +1,14 @@
+from core.security import get_current_user
 from fastapi.openapi.utils import get_openapi
 from fastapi import FastAPI, Depends
-from routers import auth, user
+from routers import auth, user, device
 import uvicorn
 
 app = FastAPI()
 
 app.include_router(auth.router)
-app.include_router(user.router, prefix='/users', tags=['Users'])
+app.include_router(user.router, prefix='/users', tags=['Users'], dependencies=[Depends(get_current_user)])
+app.include_router(device.router, prefix='/devices', tags=['Devices'], dependencies=[Depends(get_current_user)])
 
 def custom_openapi():
     if app.openapi_schema:
@@ -16,8 +18,8 @@ def custom_openapi():
         version = '1.0.0',
         description = 'checked by JWT Token',
         routes = app.routes,
-        openapi_version='3.1.0'
     )
+    openapi_schema['openapi'] = '3.1.0'
     openapi_schema['components']['securitySchemes'] = {
         'BearerAuth': {
             'type': 'http',
