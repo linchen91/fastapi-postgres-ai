@@ -21,6 +21,7 @@ class DeviceUpdate(DeviceBase):
 class DeviceOut(DeviceBase):
     Id: int
     CreatedDate: Optional[datetime]
+    UpdatedDate: Optional[datetime]
     
     class Config:
         from_attributes = True

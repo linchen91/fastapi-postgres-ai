@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, DECIMAL
 from datetime import datetime
 from database import Base
+from sqlalchemy.orm import relationship
+from models.roledevice import roledevices
 
 class Device(Base):
     __tablename__ = 'devices'
@@ -15,3 +17,10 @@ class Device(Base):
     IsActive = Column(Boolean, default=True)
     Status = Column(String(20))
     CreatedDate = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    Roles = relationship(
+        'Role',
+        secondary=roledevices,
+        back_populates='Devices'
+    )
