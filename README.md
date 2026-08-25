@@ -1,33 +1,38 @@
 # FastAPI + MySQL
 
-FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authentication.
+FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authentication and a React frontend.
 
 ## Project Structure
 
 ```
-├── main.py                # App entry point
-├── database.py            # DB connection & session
+├── main.py                # App entry point, CORS config, router registration
+├── database.py            # DB connection & session factory
 ├── core/
-│   └── security.py        # JWT auth & password hashing
+│   └── security.py        # JWT auth, password hashing, OAuth2 scheme
 ├── models/
 │   ├── user.py            # SQLAlchemy User model
 │   ├── device.py          # SQLAlchemy Device model
 │   ├── role.py            # SQLAlchemy Role model
-│   └── roledevice.py      # Many-to-many relationship table
+│   └── roledevice.py      # Many-to-many relationship table (roles ↔ devices)
 ├── schemas/
-│   ├── user.py            # Pydantic User schemas
-│   ├── device.py          # Pydantic Device schemas
-│   └── role.py            # Pydantic Role schemas
+│   ├── user.py            # Pydantic User schemas (Create, Update, Out, Login)
+│   ├── device.py          # Pydantic Device schemas (Create, Update, Out)
+│   └── role.py            # Pydantic Role schemas (CreateDto, UpdateDto, RoleDto, DeviceDto)
 ├── crud/
 │   ├── user.py            # User CRUD operations
 │   ├── device.py          # Device CRUD operations
-│   └── role.py            # Role CRUD operations
+│   └── role.py            # Role CRUD operations (with device associations)
 ├── routers/
 │   ├── auth.py            # Auth endpoints (login, hash password)
 │   ├── user.py            # User API endpoints
 │   ├── device.py          # Device API endpoints
 │   └── role.py            # Role API endpoints
-├── frontend/              # React + Vite frontend
+├── frontend/              # React + Vite frontend application
+│   ├── src/
+│   │   ├── pages/         # Login, Home, Users, Devices, Roles pages
+│   │   ├── components/    # Sidebar component
+│   │   └── configContext.jsx  # App configuration context
+│   └── package.json
 ├── service.py             # Test service
 └── test.py                # PyMySQL test
 ```
@@ -45,9 +50,27 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 
 ## Run
 
+### Backend
+
 ```bash
 python main.py
 ```
+
+Starts the FastAPI server on `http://0.0.0.0:8000` with auto-reload.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Starts the Vite dev server (default: `http://localhost:5173`).
+
+## CORS
+
+The backend allows all origins (`*`), methods, and headers for development. Restrict `allow_origins` in [main.py](main.py#L10-L16) for production.
 
 ## API Docs
 
@@ -132,9 +155,17 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 |-------|------|-------------|
 | Id | Integer | Primary key |
 | Name | String(50) | Role name |
-| Devices | Relationship | Associated devices (many-to-many) |
+| Devices | Relationship | Associated devices (many-to-many via `roledevices`) |
 | CreatedDate | DateTime | Creation timestamp |
 | UpdatedDate | DateTime | Last update timestamp |
+
+### RoleDevice (Association Table)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | Integer | Primary key |
+| RoleId | Integer | Foreign key → `roles.Id` |
+| DeviceId | Integer | Foreign key → `devices.Id` |
 
 ## Authentication
 
@@ -144,4 +175,24 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 
 ## Frontend
 
-The `frontend/` directory contains a React + Vite application. See [frontend/README.md](frontend/README.md) for setup instructions.
+The [frontend/](frontend/) directory contains a React 19 + Vite 8 application with:
+
+- **React Router 7** — client-side routing
+- **Bootstrap 5** — UI components
+- **Axios** — HTTP client for API calls
+
+### Pages
+
+| Page | Description |
+|------|-------------|
+| Login | Authentication form, stores JWT token |
+| Home | Dashboard / landing page |
+| Users | User management (list, create, edit, delete) |
+| Devices | Device management (list, create, edit, delete) |
+| Roles | Role management with device associations |
+
+### Configuration
+
+The frontend uses a `configContext` for app-wide settings. See [frontend/src/configContext.jsx](frontend/src/configContext.jsx).
+
+See [frontend/README.md](frontend/README.md) for Vite/React setup details.

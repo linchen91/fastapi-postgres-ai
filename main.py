@@ -3,8 +3,17 @@ from fastapi.openapi.utils import get_openapi
 from fastapi import FastAPI, Depends
 from routers import auth, user, device, role
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*']
+)
 
 app.include_router(auth.router)
 app.include_router(user.router, prefix='/users', tags=['Users'], dependencies=[Depends(get_current_user)])
