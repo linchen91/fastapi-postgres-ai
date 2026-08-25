@@ -13,6 +13,8 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.Account == data.account).first()
     if not user or not security.verif_password(data.password, user.Pwd):
         raise HTTPException(status_code=400, detail='Account or Password error')
+    if user.IsActive == 0:
+        raise HTTPException(status_code=400, detail='Account is inactive')
     token = security.create_access_token({'sub': user.Account})
     return {'access_token': token, 'token_type': 'bearer'}
 

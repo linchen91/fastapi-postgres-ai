@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from models.user import User
 from schemas.user import UserCreate, UserUpdate
 from datetime import datetime
+from core import security
 
 def get_users(db: Session):
     return db.query(User).all()
@@ -14,7 +15,7 @@ def create_user(db: Session, user: UserCreate):
         Account = user.Account,
         Name = user.Name,
         Email = user.Email,
-        Pwd = user.Pwd,
+        Pwd = security.get_password_hash(user.Pwd),
         IsActive = user.IsActive,
         RoleId = user.RoleId,
     )
@@ -28,6 +29,8 @@ def update_user(db: Session, user_id:int, user: UserUpdate):
     if not db_user:
         return None
     for key, value in user.dict(exclude_unset=True).items():
+        if key == 'Pwd' and value:
+            value = security.get_password_hash(value)
         setattr(db_user, key, value)
     db_user.UpdatedDate = datetime.utcnow()
     db.commit()
