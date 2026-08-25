@@ -84,7 +84,7 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| POST | /auth/token | Login and get JWT token | No |
+| POST | /auth/token | Login and get JWT token (rejects inactive accounts) | No |
 | POST | /auth/hashpwd | Hash a password with bcrypt | No |
 
 ### Users
@@ -172,6 +172,11 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 1. Obtain a JWT token via `POST /auth/token` with `account` and `password`
 2. Use the token in the `Authorization: Bearer <token>` header for all protected endpoints
 3. Tokens expire after 60 minutes
+4. Inactive accounts are rejected at login
+
+### Password Security
+
+Passwords are automatically hashed with bcrypt via `security.get_password_hash()` before being stored to the database. This applies to both user creation and updates.
 
 ## Frontend
 
@@ -187,7 +192,7 @@ The [frontend/](frontend/) directory contains a React 19 + Vite 8 application wi
 |------|-------------|
 | Login | Authentication form, stores JWT token |
 | Home | Dashboard / landing page |
-| Users | User management (list, create, edit, delete) |
+| Users | User management (list, create, edit, delete) with role assignment |
 | Devices | Device management (list, create, edit, delete) |
 | Roles | Role management with device associations |
 
