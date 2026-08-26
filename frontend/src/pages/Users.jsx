@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useConfig } from '../configContext'
-import axios from 'axios'
+import axios from '../axios'
 
 const Users = () => {
   const config = useConfig();

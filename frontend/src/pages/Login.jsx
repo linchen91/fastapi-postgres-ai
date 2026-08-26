@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import axios from '../axios'
 import { useConfig } from '../configContext'
 
 export default function Login({ setToken, setAccount}) {
@@ -23,14 +23,14 @@ export default function Login({ setToken, setAccount}) {
             localStorage.account = account;
             setToken(response.data.access_token);
             setAccount(account);
-            navigate('/home')
+            navigate('/home');
         } else
-            setError('Login failed, try again')
+            setError('Login failed, try again');
       } catch (err) {
         if (err.response?.status === 400 && err.response?.data?.detail)
             setError(err.response.data.detail);
         else
-            setError('Login failed, try again later')
+            setError('Login failed, try again later');
       }
     }
 
