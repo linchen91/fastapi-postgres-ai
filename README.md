@@ -31,6 +31,7 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 │   ├── src/
 │   │   ├── pages/         # Login, Home, Users, Devices, Roles pages
 │   │   ├── components/    # Sidebar component
+│   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   └── configContext.jsx  # App configuration context
 │   └── package.json
 ├── service.py             # Test service
@@ -185,6 +186,15 @@ The [frontend/](frontend/) directory contains a React 19 + Vite 8 application wi
 - **React Router 7** — client-side routing
 - **Bootstrap 5** — UI components
 - **Axios** — HTTP client for API calls
+
+### Axios Configuration
+
+The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/axios.js)) with a response interceptor that:
+
+- Catches **401 Unauthorized** responses
+- Clears stored `token` and `account` from `localStorage`
+- Redirects to the login page (`/`)
+- Skips the redirect for login requests (`/auth/token`)
 
 ### Pages
 
