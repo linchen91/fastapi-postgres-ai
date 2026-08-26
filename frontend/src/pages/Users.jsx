@@ -91,7 +91,7 @@ const Users = () => {
 
   return (
     <div className='container mt-4'>
-      <div className='container card p-3 mb-4'>
+      <div className='card p-3 mb-4'>
         <h4>{form.Id ? 'Edit User' : 'Add User'}</h4>
         <div className='row g-3'>
           <div className='col-md-6'>
