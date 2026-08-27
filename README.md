@@ -102,7 +102,7 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /devices/ | List all devices |
+| GET | /devices/ | List all devices (optional `?user_account=` filter by role) |
 | GET | /devices/{device_id} | Get device by ID |
 | POST | /devices/ | Create device |
 | PUT | /devices/{device_id} | Update device |
@@ -203,8 +203,8 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | Login | Authentication form, stores JWT token |
 | Home | Dashboard / landing page |
 | Users | User management (list, create, edit, delete) with role assignment |
-| Devices | Device management (list, create, edit, delete) |
-| Roles | Role management with device associations |
+| Devices | Device management (list, create, edit, delete) with live stream & map views |
+| Roles | Role management with device associations (multi-select) |
 
 ### Configuration
 

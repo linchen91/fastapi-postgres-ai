@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from crud import device as crud_device
 from schemas import device as schemas_device
+from typing import Optional
 
 router = APIRouter()
 
@@ -14,8 +15,8 @@ def get_db():
         db.close()
 
 @router.get('/', response_model=list[schemas_device.DeviceOut])
-def read_devices(db: Session = Depends(get_db)):
-    return crud_device.get_devices(db)
+def read_devices(user_account: Optional[str] = None, db: Session = Depends(get_db)):
+    return crud_device.get_devices(db, user_account)
 
 @router.get('/{device_id}', response_model=schemas_device.DeviceOut)
 def read_device(device_id:int, db: Session = Depends(get_db)):

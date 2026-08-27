@@ -1,8 +1,22 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from models.device import Device
+from models.user import User
+from models.roledevice import  roledevices
 from schemas.device import DeviceCreate, DeviceUpdate
+from datetime import datetime
 
-def get_devices(db: Session):
+def get_devices(db: Session, user_account: str = None):
+    if user_account:
+        role_id = db.query(User.RoleId).filter(User.Account == user_account).scalar()
+        if role_id is None:
+            return []
+        stmt = (
+            select(Device)
+            .join(roledevices, Device.Id == roledevices.c.DeviceId)
+            .where(roledevices.c.RoleId == role_id)
+        )
+        return db.execute(stmt).scalars().all()
     return db.query(Device).all()
 
 def get_device(db: Session, device_id: int):
