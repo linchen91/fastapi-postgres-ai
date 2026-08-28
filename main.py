@@ -4,8 +4,11 @@ from fastapi import FastAPI, Depends
 from routers import auth, user, device, role
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from api_io_log import ApiIOMiddleware
 
 app = FastAPI()
+
+app.add_middleware(ApiIOMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

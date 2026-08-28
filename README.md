@@ -34,6 +34,8 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   └── configContext.jsx  # App configuration context
 │   └── package.json
+├── api_io_log.py          # Request/response logging middleware
+├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── service.py             # Test service
 └── test.py                # PyMySQL test
 ```
@@ -72,6 +74,23 @@ Starts the Vite dev server (default: `http://localhost:5173`).
 ## CORS
 
 The backend allows all origins (`*`), methods, and headers for development. Restrict `allow_origins` in [main.py](main.py#L10-L16) for production.
+
+## Request/Response Logging
+
+`ApiIOMiddleware` logs method, path, status code, duration, and request/response bodies for every request.
+
+**Skipped by default:** `/docs`, `/redoc`, `/openapi.json`, `/docs/oauth2-redirect`, `/favicon.ico`, and `OPTIONS` requests.
+
+**Logs:** Written to `logs/YYYY-MM-DD.log` (one file per day, auto-created).
+
+**Config options** (in [main.py](main.py#L11)):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `skip_paths` | `set[str]` | docs/openapi/favicon paths | Paths to exclude from logging |
+| `skip_html` | `bool` | `True` | Skip logging HTML responses (e.g. Swagger UI) |
+
+Binary request/response bodies are logged as `<N bytes binary>` instead of raw content.
 
 ## API Docs
 
