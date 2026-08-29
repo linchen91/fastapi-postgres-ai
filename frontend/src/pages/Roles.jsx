@@ -130,7 +130,7 @@ const Roles = () => {
               <td>{r.Name}</td>
               <td>
                 {r.Devices && r.Devices.length > 0
-                    ? r.Devices.map(d => d.Name).join(':')
+                    ? r.Devices.map(d => d.Name).join('; ')
                 : <span className='text-muted'>Empty</span>}
               </td>
               <td>

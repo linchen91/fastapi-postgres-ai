@@ -205,6 +205,7 @@ The [frontend/](frontend/) directory contains a React 19 + Vite 8 application wi
 - **React Router 7** — client-side routing
 - **Bootstrap 5** — UI components
 - **Axios** — HTTP client for API calls
+- **Chart.js** — Pie and bar charts for dashboard visualizations
 
 ### Axios Configuration
 
@@ -220,10 +221,14 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | Page | Description |
 |------|-------------|
 | Login | Authentication form, stores JWT token |
-| Home | Dashboard / landing page |
+| Home | Dashboard with summary cards (users/roles/devices counts), device status pie chart, devices-per-role bar chart, and recent devices table |
 | Users | User management (list, create, edit, delete) with role assignment |
-| Devices | Device management (list, create, edit, delete) with live stream & map views |
-| Roles | Role management with device associations (multi-select) |
+| Devices | Device management (list, create, edit, delete) with live stream modal (video player) and Google Maps embed modal |
+| Roles | Role management with inline create/edit form and multi-select device associations |
+
+### Device Filtering
+
+The Devices page automatically filters devices by the logged-in user's role via `?user_account=` query parameter. Users only see devices associated with their assigned role.
 
 ### Configuration
 
