@@ -29,7 +29,7 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 │   └── role.py            # Role API endpoints
 ├── frontend/              # React + Vite frontend application
 │   ├── src/
-│   │   ├── pages/         # Login, Home, Users, Devices, Roles pages
+│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles pages
 │   │   ├── components/    # Sidebar component
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   └── configContext.jsx  # App configuration context
@@ -206,6 +206,7 @@ The [frontend/](frontend/) directory contains a React 19 + Vite 8 application wi
 - **Bootstrap 5** — UI components
 - **Axios** — HTTP client for API calls
 - **Chart.js** — Pie and bar charts for dashboard visualizations
+- **Leaflet** — Interactive maps with device markers, tooltips, popups, and live stream modal
 
 ### Axios Configuration
 
@@ -224,11 +225,23 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | Home | Dashboard with summary cards (users/roles/devices counts), device status pie chart, devices-per-role bar chart, and recent devices table |
 | Users | User management (list, create, edit, delete) with role assignment |
 | Devices | Device management (list, create, edit, delete) with live stream modal (video player) and Google Maps embed modal |
+| DevicesMap | Full-screen Leaflet map showing all devices as camera markers with tooltips, popups, and live stream modal |
 | Roles | Role management with inline create/edit form and multi-select device associations |
 
 ### Device Filtering
 
 The Devices page automatically filters devices by the logged-in user's role via `?user_account=` query parameter. Users only see devices associated with their assigned role.
+
+### Devices Map
+
+The [DevicesMap](frontend/src/pages/DevicesMap.jsx) page displays all devices on a full-screen Leaflet map with:
+
+- **Camera markers** — Custom SVG camera icons for each device
+- **Tooltips** — Hover to see device name, type, and status
+- **Popups** — Click for details (name, type, position, status) with a "Live Stream" button
+- **Live Stream modal** — Displays the device's video stream from `Params.VideoStream`
+- **Auto-fit bounds** — Map zooms to fit all device markers
+- **Role-based filtering** — Shows only devices associated with the logged-in user's role
 
 ### Configuration
 
