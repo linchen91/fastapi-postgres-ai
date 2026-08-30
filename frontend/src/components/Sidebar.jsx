@@ -15,6 +15,7 @@ export default function Sidebar({setToken,  account}) {
                 <li className='nav-item'><Link className='nav-link' to='/users'>Users</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/roles'>Roles</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/devices'>Devices</Link></li>
+                <li className='nav-item'><Link className='nav-link' to='/devicesmap'>Devices Map</Link></li>
                 <li className='nav-item'>
                     <Link className='btn btn-outline-secondary mt-3' to='/' onClick={handleLogout}>Logout</Link></li>
             </ul>

@@ -5,6 +5,7 @@ import Home from './pages/Home'
 import Users from './pages/Users'
 import Roles from './pages/Roles'
 import Devices from './pages/Devices'
+import DevicesMap from './pages/DevicesMap'
 import Sidebar from './components/Sidebar'
 import { useConfig } from "./configContext"
 
@@ -25,6 +26,7 @@ function Layout({token, setToken, account}) {
           <Route path='users' element={<ProtectedRoute token={token}><Users /></ProtectedRoute>} />
           <Route path='roles' element={<ProtectedRoute token={token}><Roles /></ProtectedRoute>} />
           <Route path='devices' element={<ProtectedRoute token={token}><Devices /></ProtectedRoute>} />
+          <Route path='devicesmap' element={<ProtectedRoute token={token}><DevicesMap /></ProtectedRoute>} />
         </Routes>
       </div>
     </div>
