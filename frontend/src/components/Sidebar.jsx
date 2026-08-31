@@ -85,12 +85,12 @@ export default function Sidebar({setToken,  account}) {
     return (
         <div className='bg-light border-end p-3' style={{ width: '200px', minHeight: '100vh'}}>
             <h5>Management</h5>
-            <p  className='text-muted small mb-2'
+            <button  className='btn btn-outline-secondary mt-3'
                 style={{ cursor: loadingUser ? 'not-allowed' : 'pointer', userSelect: 'none' }}
                 title='Click to modify Account'
                 onClick={loadingUser ? undefined : openEditModal}
                 >Account: {currentAccount}{loadingUser ? ' (loading...)' : ''}
-            </p>
+            </button>
             <ul className='nav flex-column'>
                 <li className='nav-item'><Link className='nav-link' to='/home'>Home</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/users'>Users</Link></li>
