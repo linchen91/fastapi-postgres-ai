@@ -3,7 +3,7 @@ import { useConfig } from '../configContext'
 import axios from '../axios'
 import { Modal } from 'bootstrap'
 
-import { MapContainer, TileLayer, Marker, Tooltip, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, LayersControl, Marker, Tooltip, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -103,7 +103,7 @@ const DevicesMap = () => {
     }
 
     return (
-    <div className='cars'>
+    <div className='card'>
         <div className='card-body p-0' style={{ height: 'calc(100vh - 100px)' }}>
             <MapContainer
                 center={defaultCenter}
@@ -111,10 +111,20 @@ const DevicesMap = () => {
                 scrollWheelZoom
                 style={{ height: '100%', width: '100%'}}
             >
-                <TileLayer
-                    attribution='&copy; OpenStreetMap contributors'
-                    url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-                />
+                <LayersControl position="topright">
+                    <LayersControl.BaseLayer checked name="Street">
+                        <TileLayer
+                            attribution='&copy; OpenStreetMap contributors'
+                            url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                        />
+                    </LayersControl.BaseLayer>
+                    <LayersControl.BaseLayer name="Satellite">
+                        <TileLayer
+                            attribution='&copy; Esri, Maxar, Earthstar Geographics'
+                            url='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                        />
+                    </LayersControl.BaseLayer>
+                </LayersControl>
                 <FitBounds points={points} />
                 {devices.map(d => (
                     <Marker key={d.Id} position={[d.Lat, d.Lng]} icon={cameraIcon}>
