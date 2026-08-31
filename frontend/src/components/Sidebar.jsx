@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
 import { useConfig } from '../configContext'
 import axios from '../axios'
+import { useEvents } from '../eventsContext'
 
 export default function Sidebar({setToken,  account}) {
+    const { hasUnread, markRead } = useEvents() || {};
     const config = useConfig();
     const [showModal, setShowModal] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -97,6 +99,12 @@ export default function Sidebar({setToken,  account}) {
                 <li className='nav-item'><Link className='nav-link' to='/roles'>Roles</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/devices'>Devices</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/devicesmap'>Devices Map</Link></li>
+                <li className='nav-item'><Link className='nav-link' to='/events'>Events
+                {hasUnread ? (
+                    <span className='ms-2 rounded-circle bg-danger'
+                    style={{ width: 8, height: 8, display: 'inline-block' }} />
+                ) : null}
+                </Link></li>
                 <li className='nav-item'>
                     <Link className='btn btn-outline-secondary mt-3' to='/' onClick={handleLogout}>Logout</Link></li>
             </ul>
@@ -135,7 +143,7 @@ export default function Sidebar({setToken,  account}) {
                         </div>
                     </div>
                 </div>
-            )};
+            )}
         </div>
     )
 }

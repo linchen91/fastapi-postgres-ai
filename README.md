@@ -26,13 +26,15 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 │   ├── auth.py            # Auth endpoints (login, hash password)
 │   ├── user.py            # User API endpoints
 │   ├── device.py          # Device API endpoints
-│   └── role.py            # Role API endpoints
+│   ├── role.py            # Role API endpoints
+│   └── event.py           # Event API endpoints (REST + WebSocket)
 ├── frontend/              # React + Vite frontend application
 │   ├── src/
-│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles pages
+│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events pages
 │   │   ├── components/    # Sidebar component
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
-│   │   └── configContext.jsx  # App configuration context
+│   │   ├── configContext.jsx  # App configuration context
+│   │   └── eventsContext.jsx  # Real-time events context (WebSocket + REST)
 │   └── package.json
 ├── api_io_log.py          # Request/response logging middleware
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
@@ -137,6 +139,14 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 | PUT | /roles/{role_id} | Update role and device associations |
 | DELETE | /roles/{role_id} | Delete role |
 
+### Events
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /events | List current events (one per device) |
+| PUT | /events | Add/update an event for a device |
+| WS | /events/ws?token=\<jwt\> | WebSocket for real-time event updates |
+
 ## Models
 
 ### User
@@ -227,6 +237,7 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | Devices | Device management (list, create, edit, delete) with live stream modal (video player) and Google Maps embed modal |
 | DevicesMap | Full-screen Leaflet map showing all devices as camera markers with tooltips, popups, and live stream modal |
 | Roles | Role management with inline create/edit form and multi-select device associations |
+| Events | Real-time event log showing device status changes, alarms, and info events |
 
 ### Device Filtering
 
@@ -246,5 +257,16 @@ The [DevicesMap](frontend/src/pages/DevicesMap.jsx) page displays all devices on
 ### Configuration
 
 The frontend uses a `configContext` for app-wide settings. See [frontend/src/configContext.jsx](frontend/src/configContext.jsx).
+
+### Events (Real-Time)
+
+The [eventsContext](frontend/src/eventsContext.jsx) provides real-time event updates via WebSocket:
+
+- **Initial load** — Fetches current events via `GET /events` on mount
+- **WebSocket** — Connects to `ws://<host>/events/ws?token=<jwt>` for live updates
+- **Snapshot** — Full event list pushed on connect (one event per device)
+- **Incremental** — Individual event updates pushed as they arrive
+- **Unread indicator** — Sidebar shows a red dot when new events arrive; cleared when the Events page is visited
+- **Ping/keepalive** — Sends `ping` every 30 seconds to prevent connection timeout
 
 See [frontend/README.md](frontend/README.md) for Vite/React setup details.

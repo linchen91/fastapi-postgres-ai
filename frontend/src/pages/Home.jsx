@@ -175,12 +175,7 @@ const Home = () => {
                                 <td>{statusBadge(d.Status ?? (d.IsActive ? 'active' : 'offline'))}</td>
                                 <td>{d.UpdatedDate ? new Date(d.UpdatedDate).toLocaleString() : '_'}</td>
                             </tr>
-                        ))}
-                        {recentDevices.length === 0 && (
-                            <tr>
-                                <td colSpan='3' className='text-muted'>No Device</td>
-                            </tr>
-                        )}
+                        ))}{recentDevices.length === 0 && <tr><td colSpan='3' className='text-muted'>No Device</td></tr>}
                     </tbody>
                 </table>
             </div>

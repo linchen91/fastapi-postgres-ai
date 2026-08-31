@@ -8,6 +8,8 @@ import Devices from './pages/Devices'
 import DevicesMap from './pages/DevicesMap'
 import Sidebar from './components/Sidebar'
 import { useConfig } from "./configContext"
+import Events from './pages/Events'
+import { EventsProvider } from "./eventsContext"
 
 function ProtectedRoute({token, children}) {
   if (!token)
@@ -27,6 +29,7 @@ function Layout({token, setToken, account}) {
           <Route path='roles' element={<ProtectedRoute token={token}><Roles /></ProtectedRoute>} />
           <Route path='devices' element={<ProtectedRoute token={token}><Devices /></ProtectedRoute>} />
           <Route path='devicesmap' element={<ProtectedRoute token={token}><DevicesMap /></ProtectedRoute>} />
+          <Route path='events' element={<ProtectedRoute token={token}><Events /></ProtectedRoute>} />
         </Routes>
       </div>
     </div>
@@ -43,15 +46,17 @@ export default function App() {
   }, [config]);
 
   return (
-    <Routes>
-      <Route path='/' element={
-        token ? (
-          <Navigate to='/home' />
-        ) : (
-          <Login setToken={setToken} setAccount={setAccount}/>
-        )
-      } />
-      <Route path='/*' element={<Layout token={token} setToken={setToken} account={account} />} />
-    </Routes>  
+    <EventsProvider token={token}>
+      <Routes>
+        <Route path='/' element={
+          token ? (
+            <Navigate to='/home' />
+          ) : (
+            <Login setToken={setToken} setAccount={setAccount}/>
+          )
+        } />
+        <Route path='/*' element={<Layout token={token} setToken={setToken} account={account} />} />
+      </Routes>
+    </EventsProvider> 
   )
 }
