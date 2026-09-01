@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useConfig } from '../configContext'
 import axios from '../axios'
-
+import AiSummary from '../components/AiSummary'
 import { Pie, Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend} from 'chart.js'
 
@@ -31,6 +31,27 @@ const Home = () => {
     const [devices, setDevices] = useState([]);
     const [error, setError] = useState('');
     const authHeaders = (t) => ({ headers: { Authorization: `Bearer ${t}` }});
+    const stats = useMemo(() => {
+        const deviceCounts = devices.length;
+        const activeCount = devices.filter((d) => (d.Status || '').toLowerCase() === 'active').length;
+        const errorCount = devices.filter((d) => (d.Status || '').toLowerCase() === 'error').length;
+        const offlineCount = devices.filter((d) => (d.Status || '').toLowerCase() === 'offline').length;
+
+        const recUdp = [...devices].sort((a, b) => new Date(b.UpdatedDate) - new Date(a.UpdatedDate)).slice(0, 5).map((d) => ({
+            Name: d.Name || '_',
+            Status: d.Status || (d.IsActive ? 'active' : 'offline'),
+            UpdatedDate: d.UpdatedDate || '_'
+        }));
+
+        return {
+            deviceCounts,
+            activeCount,
+            errorCount,
+            offlineCount,
+            RecUpdDevices: recUdp
+        };
+
+    }, [devices]);
 
     useEffect(() => {
         if (!config) return;
@@ -76,19 +97,25 @@ const Home = () => {
     return (
         <div className='container'>
             <div className='row mb-4 text-white'>
-                <div className='col-md-4 mb-3'>
+                <div className='col-md-3 mb-3'>
+                    <div className='card bg-primary p-3 text-center text-white'>
+                        <h5>AI Summary</h5>
+                        <div className='fs-2'><AiSummary stats={stats} /></div>
+                    </div>
+                </div>
+                <div className='col-md-3 mb-3'>
                     <div className='card bg-primary p-3 text-center text-white'>
                         <h5>Total Users</h5>
                         <div className='fs-2 fw-bold'>{users.length}</div>
                     </div>
                 </div>
-                <div className='col-md-4 mb-3'>
+                <div className='col-md-3 mb-3'>
                     <div className='card bg-success p-3 text-center text-white'>
                         <h5>Total Roles</h5>
                         <div className='fs-2 fw-bold'>{roles.length}</div>
                     </div>
                 </div>
-                <div className='col-md-4 mb-3'>
+                <div className='col-md-3 mb-3'>
                     <div className='card bg-warning p-3 text-center text-white'>
                         <h5>Total Devices</h5>
                         <div className='fs-2 fw-bold'>{devices.length}</div>
