@@ -25,13 +25,6 @@ export function EventsProvider({ token, children }) {
     const authHeaders = (t) => ({ headers: { Authorization: `Bearer ${t}` }});
 
     useEffect(() => {
-        return () => {
-            if (wsRef.current) { try { wsRef.current.close(); } catch { } }
-            wsRef.current = null;
-        };
-    }, []);
-
-    useEffect(() => {
         if (!token || !config?.API_BASE_URL) return;
 
         axios.get(`${config.API_BASE_URL}events`, authHeaders(token))
@@ -43,32 +36,44 @@ export function EventsProvider({ token, children }) {
         }).catch(() => { });
 
         const wsURL = `${toWS(config.API_BASE_URL)}events/ws?token=${encodeURIComponent(token)}`;
-        const ws = new WebSocket(wsURL);
-        wsRef.current = ws;
+        let cancelled = false;
+        let ping = null;
+        let ws = null;
 
-        ws.onmessage = (evt) => {
-            try {
-                const msg = JSON.parse(evt.data);
-                if (msg.kind === 'snapshot' && Array.isArray(msg.payload)) {
-                    mapRef.current = new Map(msg.payload.map(e => [e.deviceid, e]));
-                    const arr = Array.from(mapRef.current.values());
-                    setEvents(arr.sort((a,b) => parseTime(b.eventtime) -  parseTime(a.eventtime)));
-                } else if (msg.kind === 'event' && msg.payload) {
-                    mapRef.current.set(msg.payload.deviceid, msg.payload);
-                    const arr = Array.from(mapRef.current.values());
-                    setEvents(arr.sort((a,b) => parseTime(b.eventtime) -  parseTime(a.eventtime)));
-                    setHasUnread(true);
-                }
-            } catch { }
-        };
+        // Defer WebSocket creation so StrictMode's synchronous
+        // effect→cleanup→effect cycle cancels the first timer
+        // before it ever fires.
+        const timer = setTimeout(() => {
+            if (cancelled) return;
+            ws = new WebSocket(wsURL);
+            wsRef.current = ws;
 
-        const ping = setInterval(() => { try { ws.send('ping'); } catch { } }, 30000);
-        ws.onclose = () => clearInterval(ping);
+            ws.onmessage = (evt) => {
+                try {
+                    const msg = JSON.parse(evt.data);
+                    if (msg.kind === 'snapshot' && Array.isArray(msg.payload)) {
+                        mapRef.current = new Map(msg.payload.map(e => [e.deviceid, e]));
+                        const arr = Array.from(mapRef.current.values());
+                        setEvents(arr.sort((a,b) => parseTime(b.eventtime) -  parseTime(a.eventtime)));
+                    } else if (msg.kind === 'event' && msg.payload) {
+                        mapRef.current.set(msg.payload.deviceid, msg.payload);
+                        const arr = Array.from(mapRef.current.values());
+                        setEvents(arr.sort((a,b) => parseTime(b.eventtime) -  parseTime(a.eventtime)));
+                        setHasUnread(true);
+                    }
+                } catch { }
+            };
+
+            ping = setInterval(() => { try { ws.send('ping'); } catch { } }, 30000);
+            ws.onclose = () => clearInterval(ping);
+        }, 0);
 
         return () => {
+            cancelled = true;
+            clearTimeout(timer);
             clearInterval(ping);
-            try { ws.close(); } catch { }
-            wsRef.current = null;
+            try { ws?.close(); } catch { }
+            if (wsRef.current === ws) wsRef.current = null;
         };
     }, [token, config?.API_BASE_URL]);
 
