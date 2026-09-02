@@ -24,3 +24,11 @@ If you are developing a production application, we recommend using TypeScript wi
 ### WebSocket cleanup race
 
 `EventsProvider` created the WebSocket directly inside `useEffect`. During React 18 StrictMode's synchronous effect→cleanup→effect cycle, the cleanup closed the WebSocket before it had time to connect, producing a "closed before connection established" console error. Fixed by deferring WebSocket creation with `setTimeout(fn, 0)` — StrictMode's cleanup cancels the first timer before it fires, so only the second (real) effect run creates a connection.
+
+### Traffic analysis double-nested auth headers
+
+`Devices.jsx` `openTraffic` called `authHeaders(token)` (which returns `{ headers: { Authorization: ... } }`) then re-wrapped it in `{ headers }`, producing `headers.headers` — the Authorization token was never sent with the traffic analysis request. Fixed by passing the config object directly, matching the pattern used elsewhere in the component.
+
+### Traffic analysis double data URI prefix
+
+`Devices.jsx` rendered the traffic analysis image with `src={`data:image/jpeg;base64,${trafficImg}`}`, but the backend's `image_base64` field already includes the full data URI prefix, resulting in `data:image/jpeg;base64,data:image/jpeg;base64,...` and an `ERR_INVALID_URL`. Fixed by using `trafficImg` directly as the `src`.

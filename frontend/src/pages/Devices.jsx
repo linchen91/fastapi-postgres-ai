@@ -11,6 +11,11 @@ const Devices = () => {
   const [videoUrl, setVideoUrl] = useState('');
   const [mapUrl, setMapUrl] = useState('');
 
+  const [trafficImg, setTrafficImg] = useState('');
+  const [trafficCount, setTrafficCount] = useState(0);
+  const [trafficLoading, setTrafficLoading] = useState(false);
+  const [trafficErr, setTrafficErr] = useState('');
+
   const [form, setForm] = useState({
     Id: null,
     Code: '',
@@ -131,6 +136,34 @@ const Devices = () => {
     }
   };
 
+  const openTraffic = async (device) => {
+    setTrafficImg('');
+    setTrafficErr('');
+    setTrafficCount(0);
+    try {
+      const params = typeof device.Params === 'string' ? JSON.parse(device.Params) : device.Params;
+      const url = params?.VideoStream;
+      if (!url) {
+        alert('No video stream URL found for this device');
+        return;
+      }
+      const modalE = document.getElementById('trafficModal');
+      if (modalE) {
+        const modal = new Modal(modalE);
+        modal.show();
+      }
+      setTrafficLoading(true);
+      const payload = { url };
+      const res = await axios.post(`${config.API_BASE_URL}ai/traffic/cars`, payload, token ? authHeaders(token) : {});
+      setTrafficImg(res.data?.image_base64 || '');
+      setTrafficCount(res.data?.vehicles ?? 0);
+    } catch (err) {
+      setTrafficErr(err.response?.data?.detail || 'Failed to analyze traffic');
+    } finally {
+      setTrafficLoading(false); 
+    }
+  }; 
+
   return (
     <div className='container mt-4'>
       <div className='card p-3 mb-4'>
@@ -186,6 +219,7 @@ const Devices = () => {
             <th>Status</th>
             <th>Live Stream</th>
             <th>View Map</th>
+            <th>Traffic Analysis</th>
             <th>Operate</th>
           </tr>
         </thead>
@@ -202,6 +236,9 @@ const Devices = () => {
               </td>
               <td>
                 <button className='btn btn-sm btn-outline-success' onClick={() => openMap(d)}>View Map</button>
+              </td>
+              <td>
+                <button className='btn btn-sm btn-outline-warning' onClick={() => openTraffic(d)}>View Traffic</button>
               </td>
               <td>
                 <button className='btn btn-sm btn-secondary me-2' onClick={() => handleEdit(d)}>Edit</button>
@@ -242,6 +279,28 @@ const Devices = () => {
                   referrerPolicy='no-referrer-when-downgrade'
                   title='map'
                 />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className='modal fade' id='trafficModal' tabIndex='-1' aria-hidden='true'>
+        <div className='modal-dialog modal-xl modal-dialog-centered'>
+          <div className='modal-content'>
+            <div className='modal-header'>
+              <h5 className='modal-title'>Traffic Analysis</h5>
+              <button type='button' className='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>
+            </div>
+            <div className='modal-body text-center'>
+              {trafficLoading && <div>Loading traffic analysis...</div>}
+              {trafficErr && <div className='text-danger'>{trafficErr}</div>}
+              <div className='d-flex align-items-center gap-3 mb-3'>
+                <span>Detected Vehicles: {trafficCount}</span>
+              </div>
+              {!trafficLoading && !trafficErr && trafficImg && (
+                <div className='text-center'>
+                  <img src={trafficImg} alt='Traffic Analysis' style={{ maxWidth: '100%', maxHeight: '80vh' }} />
+                </div>
               )}
             </div>
           </div>
