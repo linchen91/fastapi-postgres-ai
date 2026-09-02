@@ -27,17 +27,20 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 │   ├── user.py            # User API endpoints
 │   ├── device.py          # Device API endpoints
 │   ├── role.py            # Role API endpoints
-│   └── event.py           # Event API endpoints (REST + WebSocket)
+│   ├── event.py           # Event API endpoints (REST + WebSocket)
+│   ├── ai_summary.py      # AI summary endpoint (OpenRouter integration)
+│   └── traffic.py         # Traffic analysis endpoint (YOLOv8 vehicle detection)
 ├── frontend/              # React + Vite frontend application
 │   ├── src/
 │   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events pages
-│   │   ├── components/    # Sidebar component
+│   │   ├── components/    # Sidebar, AISummary components
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   ├── configContext.jsx  # App configuration context
 │   │   └── eventsContext.jsx  # Real-time events context (WebSocket + REST)
 │   └── package.json
 ├── api_io_log.py          # Request/response logging middleware
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
+├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
 ├── service.py             # Test service
 └── test.py                # PyMySQL test
 ```
@@ -52,6 +55,9 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 | `MYSQL_PORT` | 3307 | MySQL port |
 | `MYSQL_DB` | dzservice | Database name |
 | `SECRET_KEY` | - | JWT signing key (required) |
+| `OPENROUTER_API_KEY` | - | OpenRouter API key for AI summaries |
+| `OPENROUTER_URL` | - | OpenRouter API endpoint URL |
+| `OPENROUTER_MODEL` | - | OpenRouter model identifier |
 
 ## Run
 
@@ -147,6 +153,18 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 | PUT | /events | Add/update an event for a device |
 | WS | /events/ws?token=\<jwt\> | WebSocket for real-time event updates |
 
+### AI Summary
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | /ai/summary | Generate AI summary of device statistics via OpenRouter | Yes |
+
+### Traffic Analysis
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | /ai/traffic/cars | Detect vehicles in a video stream using YOLOv8 | Yes |
+
 ## Models
 
 ### User
@@ -232,9 +250,9 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | Page | Description |
 |------|-------------|
 | Login | Authentication form, stores JWT token |
-| Home | Dashboard with summary cards (users/roles/devices counts), device status pie chart, devices-per-role bar chart, and recent devices table |
+| Home | Dashboard with summary cards (users/roles/devices counts), AI summary button, device status pie chart, devices-per-role bar chart, and recent devices table |
 | Users | User management (list, create, edit, delete) with role assignment |
-| Devices | Device management (list, create, edit, delete) with live stream modal (video player) and Google Maps embed modal |
+| Devices | Device management (list, create, edit, delete) with live stream modal, Google Maps embed modal, and traffic analysis modal (YOLOv8 vehicle detection) |
 | DevicesMap | Full-screen Leaflet map showing all devices as camera markers with tooltips, popups, and live stream modal |
 | Roles | Role management with inline create/edit form and multi-select device associations |
 | Events | Real-time event log showing device status changes, alarms, and info events |
@@ -253,6 +271,27 @@ The [DevicesMap](frontend/src/pages/DevicesMap.jsx) page displays all devices on
 - **Live Stream modal** — Displays the device's video stream from `Params.VideoStream`
 - **Auto-fit bounds** — Map zooms to fit all device markers
 - **Role-based filtering** — Shows only devices associated with the logged-in user's role
+
+### Traffic Analysis
+
+The Devices page includes a **Traffic Analysis** feature that detects vehicles in video streams using YOLOv8:
+
+- **Vehicle detection** — Analyzes video stream frames for cars, trucks, buses, motorcycles, and bicycles
+- **Annotated image** — Returns the original image with detection bounding boxes drawn
+- **Vehicle count** — Displays total detected vehicles and breakdown by class
+- **Modal display** — Results shown in a modal with the annotated image
+
+Backend endpoint: `POST /ai/traffic/cars` with `{ url: "<video_stream_url>" }`.
+
+### AI Summary
+
+The Home page includes an **AI Summary** button that generates a natural language summary of device statistics using OpenRouter:
+
+- **Device statistics** — Summarizes total devices, active/error/offline counts, and recently updated devices
+- **OpenRouter integration** — Calls the configured OpenRouter model via `POST /ai/summary`
+- **Modal display** — Summary text shown in a modal dialog
+
+Requires `OPENROUTER_API_KEY`, `OPENROUTER_URL`, and `OPENROUTER_MODEL` environment variables.
 
 ### Configuration
 
