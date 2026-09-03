@@ -7,32 +7,25 @@ import { MapContainer, TileLayer, LayersControl, Marker, Tooltip, Popup, useMap 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-const cameraSvg = encodeURIComponent(`
-<svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-	 width="800px" height="800px" viewBox="0 0 64 64" enable-background="new 0 0 64 64" xml:space="preserve">
-<g>
-	<path fill="#3167ad" d="M60,10H49.656l-6.828-6.828C42.078,2.422,41.062,2,40,2H24c-1.062,0-2.078,0.422-2.828,1.172L14.344,10H4
-		c-2.211,0-4,1.789-4,4v44c0,2.211,1.789,4,4,4h56c2.211,0,4-1.789,4-4V14C64,11.789,62.211,10,60,10z M32,50
-		c-8.836,0-16-7.164-16-16s7.164-16,16-16s16,7.164,16,16S40.836,50,32,50z"/>
-	<circle fill="#3167ad" cx="32" cy="34" r="8"/>
-</g>
-</svg>
-`);
-const cameraIcon = new L.Icon({
-    iconUrl: `data:image/svg+xml;charset=UTF-8,${cameraSvg}`,
+const cameraIcon = L.divIcon({
+    className: '',
     iconSize: [38, 38],
     iconAnchor: [19, 19],
     popupAnchor: [0, -20],
     tooltipAnchor: [0, -14],
-    className: 'camera-marker'
+    html: '<svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 64 64" style="display:block"><path fill="#3167ad" d="M60,10H49.656l-6.828-6.828C42.078,2.422,41.062,2,40,2H24c-1.062,0-2.078,0.422-2.828,1.172L14.344,10H4c-2.211,0-4,1.789-4,4v44c0,2.211,1.789,4,4,4h56c2.211,0,4-1.789,4-4V14C64,11.789,62.211,10,60,10z M32,50c-8.836,0-16-7.164-16-16s7.164-16,16-16s16,7.164,16,16S40.836,50,32,50z"/><circle fill="#3167ad" cx="32" cy="34" r="8"/></svg>'
 });
 
 function FitBounds({ points }) {
     const map = useMap();
     useEffect(() => {
-        if (!points?.length) return;
-        const bounds = L.latLngBounds(points.map(p => [p.Lat, p.Lng]));
-        map.fitBounds(bounds, { padding: [40, 40] });
+        const timer = setTimeout(() => {
+            map.invalidateSize();
+            if (!points?.length) return;
+            const bounds = L.latLngBounds(points.map(p => [p.Lat, p.Lng]));
+            map.fitBounds(bounds, { padding: [40, 40] });
+        }, 300);
+        return () => clearTimeout(timer);
     }, [points, map]);
     return null;
 }

@@ -1,15 +1,17 @@
 import { Routes, Route, Navigate, Outlet } from "react-router-dom"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import Users from './pages/Users'
 import Roles from './pages/Roles'
 import Devices from './pages/Devices'
-import DevicesMap from './pages/DevicesMap'
 import Sidebar from './components/Sidebar'
 import { useConfig } from "./configContext"
 import Events from './pages/Events'
 import { EventsProvider } from "./eventsContext"
+
+const DevicesMap = lazy(() => import('./pages/DevicesMap'))
+const News = lazy(() => import('./pages/News'))
 
 function ProtectedRoute({token, children}) {
   if (!token)
@@ -28,8 +30,9 @@ function Layout({token, setToken, account}) {
           <Route path='users' element={<ProtectedRoute token={token}><Users /></ProtectedRoute>} />
           <Route path='roles' element={<ProtectedRoute token={token}><Roles /></ProtectedRoute>} />
           <Route path='devices' element={<ProtectedRoute token={token}><Devices /></ProtectedRoute>} />
-          <Route path='devicesmap' element={<ProtectedRoute token={token}><DevicesMap /></ProtectedRoute>} />
+          <Route path='devicesmap' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading map...</div>}><DevicesMap /></Suspense></ProtectedRoute>} />
           <Route path='events' element={<ProtectedRoute token={token}><Events /></ProtectedRoute>} />
+          <Route path='news' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading news...</div>}><News /></Suspense></ProtectedRoute>} />
         </Routes>
       </div>
     </div>

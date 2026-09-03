@@ -86,7 +86,7 @@ const Roles = () => {
   };
 
   return (
-    <div className='container mt-4'>
+    <div className='container-fluid mt-4'>
       <div className='card p-3 mb-4'>
         <h4>{form.Id ? 'Edit Role' : 'Add Role'}</h4>
         <div className='row g-3'>

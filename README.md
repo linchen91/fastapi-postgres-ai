@@ -29,10 +29,11 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 │   ├── role.py            # Role API endpoints
 │   ├── event.py           # Event API endpoints (REST + WebSocket)
 │   ├── ai_summary.py      # AI summary endpoint (OpenRouter integration)
-│   └── traffic.py         # Traffic analysis endpoint (YOLOv8 vehicle detection)
+│   ├── traffic.py         # Traffic analysis endpoint (YOLOv8 vehicle detection)
+│   └── news.py            # Traffic news endpoint (BR.de traffic data + cache)
 ├── frontend/              # React + Vite frontend application
 │   ├── src/
-│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events pages
+│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events, News pages
 │   │   ├── components/    # Sidebar, AISummary components
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   ├── configContext.jsx  # App configuration context
@@ -165,6 +166,13 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 |--------|----------|-------------|------|
 | POST | /ai/traffic/cars | Detect vehicles in a video stream using YOLOv8 | Yes |
 
+### News
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | /news | Fetch traffic messages from BR.de (2-min cache) | No |
+| GET | /news?force=true | Force refresh, bypass cache | No |
+
 ## Models
 
 ### User
@@ -256,6 +264,7 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | DevicesMap | Full-screen Leaflet map showing all devices as camera markers with tooltips, popups, and live stream modal |
 | Roles | Role management with inline create/edit form and multi-select device associations |
 | Events | Real-time event log showing device status changes, alarms, and info events |
+| News | Traffic news map with category filtering, location markers, and per-location map modal |
 
 ### Device Filtering
 
@@ -263,14 +272,16 @@ The Devices page automatically filters devices by the logged-in user's role via 
 
 ### Devices Map
 
-The [DevicesMap](frontend/src/pages/DevicesMap.jsx) page displays all devices on a full-screen Leaflet map with:
+The [DevicesMap](frontend/src/pages/DevicesMap.jsx) page displays all devices on a Leaflet map with:
 
-- **Camera markers** — Custom SVG camera icons for each device
+- **Camera markers** — Custom SVG camera icons via `L.DivIcon` (no wrapper class for pixel-accurate positioning)
 - **Tooltips** — Hover to see device name, type, and status
 - **Popups** — Click for details (name, type, position, status) with a "Live Stream" button
 - **Live Stream modal** — Displays the device's video stream from `Params.VideoStream`
 - **Auto-fit bounds** — Map zooms to fit all device markers
 - **Role-based filtering** — Shows only devices associated with the logged-in user's role
+- **Deferred map init** — `invalidateSize()` called after modal transition to fix sizing in modal context
+- **Code-split** — DevicesMap page is lazy-loaded via `React.lazy()`, excluded from the initial bundle
 
 ### Traffic Analysis
 
@@ -308,4 +319,22 @@ The [eventsContext](frontend/src/eventsContext.jsx) provides real-time event upd
 - **Unread indicator** — Sidebar shows a red dot when new events arrive; cleared when the Events page is visited
 - **Ping/keepalive** — Sends `ping` every 30 seconds to prevent connection timeout
 
-See [frontend/README.md](frontend/README.md) for Vite/React setup details.
+### News (Traffic Messages)
+
+The [News](frontend/src/pages/News.jsx) page displays real-time traffic messages from BR.de with an interactive map:
+
+- **Data source** — Fetches traffic messages from `https://www.br.de/verkehrskarte/verkehrsdaten/verkehrsmeldungen.json`
+- **Server-side cache** — 2-minute TTL cache, pre-warmed at startup for instant first load
+- **Force refresh** — `GET /news?force=true` bypasses the cache and fetches live data
+- **No-cache headers** — `Cache-Control: no-cache, no-store, must-revalidate` prevents browser caching
+- **Category filtering** — Filter messages by category (Gefahren, Autobahnen, etc.)
+- **Location markers** — Click a headline to open a Leaflet map modal showing the incident location
+- **Marker positioning** — Uses `L.DivIcon` with inline SVG wrapped in a sized div (`line-height:0`) for pixel-accurate anchor alignment; no `.leaflet-div-icon` class to avoid border/background offset
+- **Lazy map mount** — `MapContainer` only renders when the modal opens, avoiding unnecessary tile downloads on page load
+- **Code-split** — News page and Leaflet (154 KB) are lazy-loaded via `React.lazy()`, excluded from the initial bundle
+
+Backend endpoint: `GET /news` (no auth required).
+
+### Page Layout
+
+Users, Roles, and Devices pages use `container-fluid` for full-width content area. Other pages (Home, Events, News) also use `container-fluid`.
