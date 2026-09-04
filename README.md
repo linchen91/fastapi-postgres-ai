@@ -1,6 +1,6 @@
-# FastAPI + MySQL
+# FastAPI + PostgreSQL
 
-FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authentication and a React frontend.
+FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT authentication and a React frontend.
 
 ## Project Structure
 
@@ -43,18 +43,18 @@ FastAPI REST API with MySQL database using SQLAlchemy ORM, featuring JWT authent
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
 ├── service.py             # Test service
-└── test.py                # PyMySQL test
+└── test.py                # PostgreSQL test
 ```
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MYSQL_USER` | dzuser | MySQL username |
-| `MYSQL_PASSWORD` | L@12345678 | MySQL password |
-| `MYSQL_HOST` | localhost | MySQL host |
-| `MYSQL_PORT` | 3307 | MySQL port |
-| `MYSQL_DB` | dzservice | Database name |
+| `POSTGRES_USER` | postgres | PostgreSQL username |
+| `POSTGRES_PASSWORD` | 123456 | PostgreSQL password |
+| `POSTGRES_HOST` | localhost | PostgreSQL host |
+| `POSTGRES_PORT` | 5432 | PostgreSQL port |
+| `POSTGRES_DB` | dzservice | Database name |
 | `SECRET_KEY` | - | JWT signing key (required) |
 | `OPENROUTER_API_KEY` | - | OpenRouter API key for AI summaries |
 | `OPENROUTER_URL` | - | OpenRouter API endpoint URL |
@@ -180,12 +180,12 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 | Field | Type | Description |
 |-------|------|-------------|
 | Id | Integer | Primary key |
-| Account | String(45) | Unique username |
-| Name | String(45) | Display name |
-| Email | String(45) | Email address |
+| Account | String(50) | Unique username |
+| Name | String(50) | Display name |
+| Email | String(50) | Email address |
 | Pwd | String(200) | Password hash |
 | IsActive | Boolean | Active status |
-| RoleId | Integer | Role identifier |
+| RoleId | BigInteger | Role identifier |
 | CreatedDate | DateTime | Creation timestamp |
 | UpdatedDate | DateTime | Last update timestamp |
 
@@ -219,9 +219,8 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 
 | Field | Type | Description |
 |-------|------|-------------|
-| Id | Integer | Primary key |
-| RoleId | Integer | Foreign key → `roles.Id` |
-| DeviceId | Integer | Foreign key → `devices.Id` |
+| RoleId | BigInteger | Foreign key → `roles.id` (composite PK) |
+| DeviceId | BigInteger | Foreign key → `devices.id` (composite PK) |
 
 ## Authentication
 

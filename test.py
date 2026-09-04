@@ -1,16 +1,17 @@
 from fastapi import FastAPI
-import pymysql
+import psycopg2
+import psycopg2.cursors
+
 app = FastAPI()
 
 def get_db_connection():
-    return pymysql.connect(
+    return psycopg2.connect(
         host="localhost",
-        port=3307,
-        user="root",
+        port=5432,
+        user="postgres",
         password="123456",
         database="dzservice",
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor
+        cursor_factory=psycopg2.cursors.RealDictCursor
     )
 
 @app.get("/")
