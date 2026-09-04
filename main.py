@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from core.security import get_current_user
 from fastapi.openapi.utils import get_openapi
 from fastapi import FastAPI, Depends
@@ -7,7 +8,12 @@ import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from api_io_log import ApiIOMiddleware
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await preload_cache()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(ApiIOMiddleware)
 
@@ -27,10 +33,6 @@ app.include_router(event.router, prefix='/events', tags=['Events'])
 app.include_router(ai_summary.router, prefix='/ai', tags=['AI'], dependencies=[Depends(get_current_user)])
 app.include_router(traffic.router, prefix='/ai/traffic', tags=['AI'], dependencies=[Depends(get_current_user)])
 app.include_router(news.router, prefix='/news', tags=['News'])
-
-@app.on_event("startup")
-async def startup_event():
-    await preload_cache()
 
 def custom_openapi():
     if app.openapi_schema:
