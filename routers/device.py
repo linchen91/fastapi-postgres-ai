@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from database import SessionLocal
 from crud import device as crud_device
 from schemas import device as schemas_device
@@ -27,7 +28,11 @@ def read_device(device_id:int, db: Session = Depends(get_db)):
 
 @router.post('/', response_model=schemas_device.DeviceOut)
 def create_device(device: schemas_device.DeviceCreate, db: Session = Depends(get_db)):
-    return crud_device.create_device(db, device)
+    try:
+        return crud_device.create_device(db, device)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f'Device with code "{device.Code}" already exists')
 
 @router.put('/{device_id}', response_model=schemas_device.DeviceOut)
 def update_device(device_id:int, device: schemas_device.DeviceUpdate, db: Session = Depends(get_db)):
