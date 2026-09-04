@@ -13,8 +13,8 @@ def get_devices(db: Session, user_account: str = None):
             return []
         stmt = (
             select(Device)
-            .join(roledevices, Device.Id == roledevices.c.DeviceId)
-            .where(roledevices.c.RoleId == role_id)
+            .join(roledevices, Device.Id == roledevices.c.deviceid)
+            .where(roledevices.c.roleid == role_id)
         )
         return db.execute(stmt).scalars().all()
     return db.query(Device).all()

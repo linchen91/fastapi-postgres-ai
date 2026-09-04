@@ -18,7 +18,7 @@ def create_role(db: Session, name: str, device_ids: list[int]):
     db.commit()
     db.refresh(new_role)
 
-    insert_values = [{'RoleId': new_role.Id, 'DeviceId': d} for d in device_ids]
+    insert_values = [{'roleid': new_role.Id, 'deviceid': d} for d in device_ids]
     if insert_values:
         db.execute(roledevices.insert(), insert_values)
         db.commit()
@@ -33,16 +33,16 @@ def update_role(db: Session, role_id: int, name: str, device_ids: list[int]):
     role.UpdatedDate = datetime.utcnow()
     db.commit()
 
-    db.execute(delete(roledevices).where(roledevices.c.RoleId == role_id))
+    db.execute(delete(roledevices).where(roledevices.c.roleid == role_id))
     db.commit()
 
-    insert_values = [{'RoleId': role_id, 'DeviceId': d} for d in device_ids]
+    insert_values = [{'roleid': role_id, 'deviceid': d} for d in device_ids]
     if insert_values:
         db.execute(roledevices.insert(), insert_values)
         db.commit()
     return role
 
 def delete_role(db: Session, role_id: int):
-    db.execute(delete(roledevices).where(roledevices.c.RoleId == role_id))
+    db.execute(delete(roledevices).where(roledevices.c.roleid == role_id))
     db.execute(delete(Role).where(Role.Id == role_id))
     db.commit()
