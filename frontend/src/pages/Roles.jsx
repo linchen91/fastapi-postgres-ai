@@ -68,7 +68,7 @@ const Roles = () => {
     setForm({
       Id: r.Id,
       Name: r.Name,
-      DevicesId: r.Devices?.map(d => d.Id) || []
+      DeviceIds: r.Devices?.map(d => d.Id) || []
     });
   };
 
@@ -107,7 +107,7 @@ const Roles = () => {
               }}
               >
               {devices.map(d => (
-                <option key={d.Id} value={d.Id}>{d.Name}</option>
+                <option key={d.Id} value={d.Id}>{d.Name} ({d.Code})</option>
               ))}
             </select>
           </div>
