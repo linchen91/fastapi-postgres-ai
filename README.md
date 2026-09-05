@@ -1,6 +1,6 @@
-# FastAPI + PostgreSQL
+# FastAPI + PostgreSQL + AI
 
-FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT authentication and a React frontend.
+FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT authentication, AI-powered features, and a React frontend.
 
 ## Project Structure
 
@@ -34,7 +34,7 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   └── news.py            # Traffic news endpoint (BR.de traffic data + cache)
 ├── frontend/              # React + Vite frontend application
 │   ├── src/
-│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events, News pages
+│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events, News, LangGraph pages
 │   │   ├── components/    # Sidebar, AISummary components
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   ├── configContext.jsx  # App configuration context
@@ -274,6 +274,7 @@ The app uses a centralized Axios instance ([frontend/src/axios.js](frontend/src/
 | Roles | Role management with inline create/edit form and multi-select device associations |
 | Events | Real-time event log showing device status changes, alarms, and info events |
 | News | Traffic news map with category filtering, location markers, and per-location map modal |
+| Search Assistant | AI-powered search chat using LangGraph, Tavily API, and OpenRouter LLM |
 
 ### Device Filtering
 
@@ -357,6 +358,20 @@ The [News](frontend/src/pages/News.jsx) page displays real-time traffic messages
 - **Code-split** — News page and Leaflet (154 KB) are lazy-loaded via `React.lazy()`, excluded from the initial bundle
 
 Backend endpoint: `GET /news` (no auth required).
+
+### Search Assistant (LangGraph)
+
+The [Search Assistant](frontend/src/pages/LangGraph.jsx) page provides an AI-powered chat interface for real-time web searches:
+
+- **Chat interface** — Type questions in a chat-style UI with message history
+- **LangGraph workflow** — 3-step pipeline: query understanding → web search → answer generation
+- **Tavily API** — Fetches real-time information from the internet
+- **OpenRouter LLM** — Generates comprehensive answers using search results
+- **Fallback handling** — Falls back to LLM knowledge if search API is unavailable
+- **Keyboard shortcut** — Press Enter to submit, Shift+Enter for new line
+- **Code-split** — Page is lazy-loaded via `React.lazy()`, excluded from the initial bundle
+
+Backend endpoint: `POST /ai/langgraph` with `{ "query": "<user question>" }`.
 
 ### Page Layout
 

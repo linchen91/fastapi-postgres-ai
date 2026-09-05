@@ -174,11 +174,12 @@ def generate_answer_node(state: SearchState) -> SearchState:
     # Check for search results.
     if state["step"] == "search_failed":
         # If the search fails, answer based on LLM knowledge.
-        fallback_prompt = f"""The search API is temporarily unavailable; please answer the user's question based on existing knowledge.：
+        fallback_prompt = f"""The search API is temporarily unavailable; please answer the user's question based on existing knowledge.
 
         User query: {user_query}
 
-        Please provide a helpful answer and indicate that it is based on existing knowledge."""
+        Please provide a helpful answer in HTML format and indicate that it is based on existing knowledge.
+        Use proper HTML tags like <h3>, <p>, <ul>, <li>, <code>, <pre>, <strong>, <em> for formatting."""
 
         response = get_llm().invoke([HumanMessage(content=fallback_prompt)])
 
@@ -189,11 +190,11 @@ def generate_answer_node(state: SearchState) -> SearchState:
         }
 
     # Generate an answer based on search results.
-    answer_prompt = f"""Provide a complete and accurate answer to the user based on the following search results：
+    answer_prompt = f"""Provide a complete and accurate answer to the user based on the following search results.
 
-    User query：{user_query}
+    User query: {user_query}
 
-    Search results：
+    Search results:
     {state['search_results']}
 
     Requirements:
@@ -201,7 +202,12 @@ def generate_answer_node(state: SearchState) -> SearchState:
     2. For technical questions, provide specific solutions or code.
     3. Cite sources for key information.
     4. Ensure the answer is well-structured and easy to understand.
-    5. If search results are incomplete, state this and offer supplementary suggestions."""
+    5. If search results are incomplete, state this and offer supplementary suggestions.
+    6. Format your answer using HTML tags: <h3>, <p>, <ul>, <li>, <code>, <pre>, <strong>, <em>, <a>, <blockquote>.
+    7. Use <code> and <pre> for code snippets.
+    8. Use <ul>/<li> for lists and <a href="..."> for links.
+    9. Do NOT include <html>, <head>, <body> tags - just the content HTML.
+    10. Do NOT include markdown formatting - use HTML only."""
 
     response = get_llm().invoke([HumanMessage(content=answer_prompt)])
 
