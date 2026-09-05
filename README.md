@@ -29,6 +29,7 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   ├── role.py            # Role API endpoints
 │   ├── event.py           # Event API endpoints (REST + WebSocket)
 │   ├── ai_summary.py      # AI summary endpoint (OpenRouter integration)
+│   ├── langgraph.py       # LangGraph search assistant (Tavily + OpenRouter)
 │   ├── traffic.py         # Traffic analysis endpoint (YOLOv8 vehicle detection)
 │   └── news.py            # Traffic news endpoint (BR.de traffic data + cache)
 ├── frontend/              # React + Vite frontend application
@@ -59,6 +60,9 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 | `OPENROUTER_API_KEY` | - | OpenRouter API key for AI summaries |
 | `OPENROUTER_URL` | - | OpenRouter API endpoint URL |
 | `OPENROUTER_MODEL` | - | OpenRouter model identifier |
+| `TAVILY_API_KEY` | - | Tavily API key for web search (required for LangGraph) |
+| `LLM_BASE_URL` | https://openrouter.ai/api/v1 | LLM API base URL for LangGraph |
+| `LLM_MODEL_ID` | - | LLM model identifier for LangGraph |
 
 ## Run
 
@@ -159,6 +163,12 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | POST | /ai/summary | Generate AI summary of device statistics via OpenRouter | Yes |
+
+### LangGraph Search Assistant
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | /ai/langgraph | Smart search using LangGraph + Tavily API + OpenRouter LLM | No |
 
 ### Traffic Analysis
 
@@ -302,6 +312,20 @@ The Home page includes an **AI Summary** button that generates a natural languag
 - **Modal display** — Summary text shown in a modal dialog
 
 Requires `OPENROUTER_API_KEY`, `OPENROUTER_URL`, and `OPENROUTER_MODEL` environment variables.
+
+### LangGraph Search Assistant
+
+A real-world search system powered by LangGraph, Tavily API, and OpenRouter LLM:
+
+- **Query understanding** — Analyzes user queries to generate optimal search keywords
+- **Web search** — Uses Tavily API to fetch real-time information from the internet
+- **Answer generation** — Synthesizes search results into comprehensive answers using LLM
+- **Fallback handling** — Falls back to LLM knowledge if search API is unavailable
+- **Stateful workflow** — 3-step pipeline: understand → search → answer
+
+Backend endpoint: `POST /ai/langgraph` with `{ "query": "<user question>" }`.
+
+Requires `TAVILY_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL_ID` environment variables.
 
 ### Configuration
 
