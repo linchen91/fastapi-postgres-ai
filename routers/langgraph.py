@@ -3,23 +3,44 @@ Smart Search Assistant – A real-world search system powered by LangGraph and t
 1. Understand user needs
 2. Perform real-world information searches using the Tavily API
 3. Generate answers based on search results
+
+Special handling: Bayern traffic queries use BR.de data directly.
 """
 
-import asyncio
 from typing import TypedDict, Annotated
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import InMemorySaver
-import os
 from dotenv import load_dotenv
 from tavily import TavilyClient
 from fastapi import APIRouter, HTTPException
-import os, httpx, datetime
+import os, httpx
 
 load_dotenv(override=True)
 router = APIRouter()
+
+TRAFFIC_JSON_URL = 'https://www.br.de/verkehrskarte/verkehrsdaten/verkehrsmeldungen.json'
+TRAFFIC_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+}
+
+BAYERN_KEYWORDS = [
+    'bayern', 'bavaria', 'münchen', 'munich', 'nürnberg', 'nuremberg',
+    'augsburg', 'regensburg', 'würzburg', 'wurzburg', 'ingolstadt'
+]
+
+TRAFFIC_KEYWORDS = [
+    'verkehr', 'traffic', 'stau', 'meldung', 'meldung',
+    'autobahn', 'straße', 'strasse', 'road', 'unfall', 'accident',
+    'br.de', 'verkehrskarte', 'verkehrsdaten'
+]
+
+
+def is_bayern_traffic_query(query: str) -> bool:
+    query_lower = query.lower()
+    return any(kw in query_lower for kw in BAYERN_KEYWORDS) and any(k in query_lower for k in TRAFFIC_KEYWORDS)
 
 class SearchState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -110,9 +131,49 @@ def understand_query_node(state: SearchState) -> SearchState:
 
 
 def tavily_search_node(state: SearchState) -> SearchState:
-    """Step 2: Perform real-world searches using the Tavily API."""
+    """Step 2: Perform real-world searches using the Tavily API or BR.de traffic data."""
 
     search_query = state["search_query"]
+    user_query = state.get("user_query", "")
+
+    if is_bayern_traffic_query(user_query):
+        try:
+            print(f"🚗 Bayern traffic detected, fetching BR.de data...")
+            with httpx.Client(
+                headers=TRAFFIC_HEADERS,
+                verify=False,
+                follow_redirects=True,
+                timeout=30.0,
+            ) as client:
+                res = client.get(TRAFFIC_JSON_URL)
+                res.raise_for_status()
+                data = res.json()
+
+            messages = []
+            for category in data.get('bmtKategorien', []):
+                cat_title = category.get('titel', '')
+                for msg in category.get('meldungen', []):
+                    headline = msg.get('headline', '')
+                    description = '\n'.join(msg.get('absatz', []))
+                    time = msg.get('meldungsZeit', '')
+                    messages.append(f"[{cat_title}] {headline}\n{description}\nZeit: {time}")
+
+            summary = data.get('verkehrslageHinweis', '')
+            timestamp = data.get('exportZeitstempel', '')
+            total = len(messages)
+
+            result = f"Bayern Verkehrslage (BR.de) - Stand: {timestamp}\n"
+            result += f"Zusammenfassung: {summary}\n"
+            result += f"Gesamt: {total} Meldungen\n\n"
+            result += "\n---\n".join(messages) if messages else "Keine Meldungen verfügbar."
+
+            return {
+                "search_results": result,
+                "step": "searched",
+                "messages": [AIMessage(content="✅ Bayern traffic data loaded from BR.de!")]
+            }
+        except Exception as e:
+            print(f"❌ BR.de fetch failed: {e}, falling back to Tavily")
 
     try:
         print(f"🔍 Searching...: {search_query}")
