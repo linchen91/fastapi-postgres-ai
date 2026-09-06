@@ -103,7 +103,8 @@ def understand_query_node(state: SearchState) -> SearchState:
 
     Please complete two tasks:
     1. Concisely summarize what the user wants to know.
-    2. Generate the most suitable search keywords (precise terms in either German or English).
+    2. Generate the most suitable search keywords (precise terms in either
+        German or English, depending on the query's language).
 
     Format:
     Understanding: [Summary of user needs]
@@ -232,14 +233,24 @@ def generate_answer_node(state: SearchState) -> SearchState:
             "messages": [AIMessage(content="❌ No user query provided; unable to generate an answer")]
         }
 
+    # Extract the ORIGINAL user message for language detection.
+    # state["user_query"] is the LLM's analysis, NOT the user's actual question.
+    original_message = ""
+    for message in state["messages"]:
+        if isinstance(message, HumanMessage):
+            original_message = message.content
+            break
+
     # Check for search results.
     if state["step"] == "search_failed":
         # If the search fails, answer based on LLM knowledge.
         fallback_prompt = f"""The search API is temporarily unavailable; please answer the user's question based on existing knowledge.
 
-        User query: {user_query}
+        User's original question: {original_message}
 
         Please provide a helpful answer in HTML format and indicate that it is based on existing knowledge.
+        You MUST answer in the SAME language as the user's original question above.
+        If the user asked in English, respond in English. If the user asked in German, respond in German.
         Use proper HTML tags like <h3>, <p>, <ul>, <li>, <code>, <pre>, <strong>, <em> for formatting."""
 
         response = get_llm().invoke([HumanMessage(content=fallback_prompt)])
@@ -253,22 +264,23 @@ def generate_answer_node(state: SearchState) -> SearchState:
     # Generate an answer based on search results.
     answer_prompt = f"""Provide a complete and accurate answer to the user based on the following search results.
 
-    User query: {user_query}
+    User's original question: {original_message}
 
     Search results:
     {state['search_results']}
 
     Requirements:
-    1. Synthesize search results to provide accurate and useful answers.
-    2. For technical questions, provide specific solutions or code.
-    3. Cite sources for key information.
-    4. Ensure the answer is well-structured and easy to understand.
-    5. If search results are incomplete, state this and offer supplementary suggestions.
-    6. Format your answer using HTML tags: <h3>, <p>, <ul>, <li>, <code>, <pre>, <strong>, <em>, <a>, <blockquote>.
-    7. Use <code> and <pre> for code snippets.
-    8. Use <ul>/<li> for lists and <a href="..."> for links.
-    9. Do NOT include <html>, <head>, <body> tags - just the content HTML.
-    10. Do NOT include markdown formatting - use HTML only."""
+    1. You MUST answer in the SAME language as the user's original question above. If the user asked in English, respond in English. If the user asked in German, respond in German. Do NOT switch languages based on the search results language.
+    2. Synthesize search results to provide accurate and useful answers.
+    3. For technical questions, provide specific solutions or code.
+    4. Cite sources for key information.
+    5. Ensure the answer is well-structured and easy to understand.
+    6. If search results are incomplete, state this and offer supplementary suggestions.
+    7. Format your answer using HTML tags: <h3>, <p>, <ul>, <li>, <code>, <pre>, <strong>, <em>, <a>, <blockquote>.
+    8. Use <code> and <pre> for code snippets.
+    9. Use <ul>/<li> for lists and <a href="..."> for links.
+    10. Do NOT include <html>, <head>, <body> tags - just the content HTML.
+    11. Do NOT include markdown formatting - use HTML only."""
 
     response = get_llm().invoke([HumanMessage(content=answer_prompt)])
 

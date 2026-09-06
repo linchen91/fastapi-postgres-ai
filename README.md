@@ -319,6 +319,7 @@ Requires `OPENROUTER_API_KEY`, `OPENROUTER_URL`, and `OPENROUTER_MODEL` environm
 A real-world search system powered by LangGraph, Tavily API, and OpenRouter LLM:
 
 - **Query understanding** — Analyzes user queries to generate optimal search keywords
+- **Bilingual support** — Search keywords and answers are generated in the same language as the user's query (German or English)
 - **Bayern traffic detection** — Automatically uses BR.de data for Bayern/traffic queries (keywords: bayern, münchen, verkehr, stau, autobahn, etc.)
 - **Web search** — Uses Tavily API to fetch real-time information from the internet
 - **Answer generation** — Synthesizes search results into comprehensive answers using LLM
@@ -366,6 +367,7 @@ The [Search Assistant](frontend/src/pages/LangGraph.jsx) page provides an AI-pow
 
 - **Chat interface** — Type questions in a chat-style UI with message history
 - **LangGraph workflow** — 3-step pipeline: query understanding → web search → answer generation
+- **Bilingual support** — Search keywords and answers match the query's language (German or English)
 - **Bayern traffic detection** — Automatically uses BR.de data for Bayern/traffic queries (keywords: bayern, münchen, verkehr, stau, autobahn, etc.)
 - **Tavily API** — Fetches real-time information from the internet
 - **OpenRouter LLM** — Generates comprehensive answers using search results
