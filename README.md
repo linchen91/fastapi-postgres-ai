@@ -349,6 +349,8 @@ The [eventsContext](frontend/src/eventsContext.jsx) provides real-time event upd
 
 ### News (Traffic Messages)
 
+![Traffic News](./Traffic_News.png)
+
 The [News](frontend/src/pages/News.jsx) page displays real-time traffic messages from BR.de with an interactive map:
 
 - **Data source** — Fetches traffic messages from `https://www.br.de/verkehrskarte/verkehrsdaten/verkehrsmeldungen.json`
