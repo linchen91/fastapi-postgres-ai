@@ -295,6 +295,8 @@ The [DevicesMap](frontend/src/pages/DevicesMap.jsx) page displays all devices on
 
 ### Traffic Analysis
 
+![Traffic Analysis](./Traffic.png)
+
 The Devices page includes a **Traffic Analysis** feature that detects vehicles in video streams using YOLOv8:
 
 - **Vehicle detection** — Analyzes video stream frames for cars, trucks, buses, motorcycles, and bicycles
