@@ -363,6 +363,8 @@ Backend endpoint: `GET /news` (no auth required).
 
 ### Search Assistant (LangGraph)
 
+![Search Assistant](./Search_Assistant.png)
+
 The [Search Assistant](frontend/src/pages/LangGraph.jsx) page provides an AI-powered chat interface for real-time web searches:
 
 - **Chat interface** — Type questions in a chat-style UI with message history
