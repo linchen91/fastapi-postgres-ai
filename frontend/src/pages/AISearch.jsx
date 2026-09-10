@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useConfig } from '../configContext'
 import axios from '../axios'
 
-const LangGraph = () => {
+const AISearch = () => {
     const config = useConfig()
     const [query, setQuery] = useState('')
     const [loading, setLoading] = useState(false)
@@ -26,8 +26,8 @@ const LangGraph = () => {
         setError('')
 
         try {
-            const res = await axios.post(`${config.API_BASE_URL}ai/langgraph`, { query: trimmed })
-            const answer = res.data?.langgraph || 'No response received.'
+            const res = await axios.post(`${config.API_BASE_URL}ai/search`, { query: trimmed })
+            const answer = res.data?.search || 'No response received.'
             const assistantMessage = { role: 'assistant', content: answer, isHtml: true }
             setChatHistory(prev => [...prev, assistantMessage])
         } catch (err) {
@@ -144,4 +144,4 @@ const LangGraph = () => {
     )
 }
 
-export default LangGraph
+export default AISearch

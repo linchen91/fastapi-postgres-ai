@@ -96,7 +96,7 @@ export default function Sidebar({setToken,  account}) {
             <ul className='nav flex-column'>
                 <li className='nav-item'><Link className='nav-link' to='/home'>Home</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/news'>News</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/langgraph'>Search Assistant</Link></li>
+                <li className='nav-item'><Link className='nav-link' to='/ai/search'>Search Assistant</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/users'>Users</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/roles'>Roles</Link></li>
                 <li className='nav-item'><Link className='nav-link' to='/devices'>Devices</Link></li>

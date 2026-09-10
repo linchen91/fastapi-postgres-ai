@@ -12,7 +12,7 @@ import { EventsProvider } from "./eventsContext"
 
 const DevicesMap = lazy(() => import('./pages/DevicesMap'))
 const News = lazy(() => import('./pages/News'))
-const LangGraph = lazy(() => import('./pages/LangGraph'))
+const AISearch = lazy(() => import('./pages/AISearch'))
 
 function ProtectedRoute({token, children}) {
   if (!token)
@@ -34,7 +34,7 @@ function Layout({token, setToken, account}) {
           <Route path='devicesmap' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading map...</div>}><DevicesMap /></Suspense></ProtectedRoute>} />
           <Route path='events' element={<ProtectedRoute token={token}><Events /></ProtectedRoute>} />
           <Route path='news' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading news...</div>}><News /></Suspense></ProtectedRoute>} />
-          <Route path='langgraph' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading search assistant...</div>}><LangGraph /></Suspense></ProtectedRoute>} />
+          <Route path='ai/search' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading search assistant...</div>}><AISearch /></Suspense></ProtectedRoute>} />
         </Routes>
       </div>
     </div>
