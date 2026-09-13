@@ -13,8 +13,22 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import InMemorySaver
 from fastapi import APIRouter, HTTPException
-import os, httpx
+import os, httpx, time
 from llmbase import get_llm, get_tavily
+
+# In-memory cache for search results: {query: {"result": ..., "timestamp": ...}}
+_search_cache: dict[str, dict] = {}
+_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+def _get_cached_result(query: str) -> str | None:
+    entry = _search_cache.get(query)
+    if entry and (time.time() - entry["timestamp"]) < _CACHE_TTL_SECONDS:
+        return entry["result"]
+    _search_cache.pop(query, None)
+    return None
+
+def _set_cached_result(query: str, result: str) -> None:
+    _search_cache[query] = {"result": result, "timestamp": time.time()}
 
 router = APIRouter()
 
@@ -253,10 +267,11 @@ def generate_answer_node(state: SearchState) -> SearchState:
     10. Do NOT include <html>, <head>, <body> tags - just the content HTML.
     11. Do NOT include markdown formatting - use HTML only."""
 
+    answer_content = get_llm(0.7).invoke([HumanMessage(content=answer_prompt)]).content
     return {
-        "final_answer": get_llm(0.7).invoke([HumanMessage(content=answer_prompt)]).content,
+        "final_answer": answer_content,
         "step": "completed",
-        "messages": [AIMessage(content=get_llm(0.7).invoke([HumanMessage(content=answer_prompt)]).content)]
+        "messages": [AIMessage(content=answer_content)]
     }
 
 # Build a search workflow
@@ -282,14 +297,19 @@ def create_search_assistant():
 async def ai_search(payload: dict):
     """Main function: Run the intelligent search assistant."""
 
-    app = create_search_assistant()
-
-    print("🔍 Smart search assistant activated!")
-
     user_input = payload.get('query')
 
     if not user_input:
         raise HTTPException(status_code=400, detail="Missing 'query' in request body.")
+
+    cached = _get_cached_result(user_input)
+    if cached:
+        print(f"📦 Cache hit for: {user_input[:50]}...")
+        return {"search": cached}
+
+    app = create_search_assistant()
+
+    print("🔍 Smart search assistant activated!")
 
     config = {"configurable": {"thread_id": "search-session-1"}}
 
@@ -318,6 +338,7 @@ async def ai_search(payload: dict):
                             print(f"🔍 Search phase: {latest_message.content}")
                         elif node_name == "answer":
                             print(f"\n💡 Final Answer:\n{latest_message.content}")
+                            _set_cached_result(user_input, latest_message.content)
                             return {"search": latest_message.content}
 
         print("\n" + "="*60 + "\n")
