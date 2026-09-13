@@ -17,8 +17,10 @@ def _get_openrouter_config():
     return api_key, base_url, model_id
 
 
-def get_llm(tp):
+def get_llm(tp=None):
     global _llm
+    if tp is None:
+        tp = 0.7
     if _llm is None:
         api_key, base_url, model_id = _get_openrouter_config()
         _llm = ChatOpenAI(
