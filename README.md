@@ -44,7 +44,7 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
 ├── service.py             # Test service
-└── test.py                # PostgreSQL test
+└── test.py                # PostgreSQL + vector search test (LangChain + LlamaIndex with OpenRouter)
 ```
 
 ## Environment Variables
@@ -325,6 +325,7 @@ A real-world search system powered by LangGraph, Tavily API, and OpenRouter LLM:
 - **Web search** — Uses Tavily API to fetch real-time information from the internet
 - **Answer generation** — Synthesizes search results into comprehensive answers using LLM
 - **Fallback handling** — Falls back to LLM knowledge if search API is unavailable
+- **In-memory cache** — 5-minute TTL cache avoids redundant LLM calls for repeated queries
 - **Stateful workflow** — 3-step pipeline: understand → search → answer
 
 Backend endpoint: `POST /ai/search` with `{ "query": "<user question>" }`.
@@ -376,6 +377,7 @@ The [Search Assistant](frontend/src/pages/LangGraph.jsx) page provides an AI-pow
 - **Bayern traffic detection** — Automatically uses BR.de data for Bayern/traffic queries (keywords: bayern, münchen, verkehr, stau, autobahn, etc.)
 - **Tavily API** — Fetches real-time information from the internet
 - **OpenRouter LLM** — Generates comprehensive answers using search results
+- **In-memory cache** — 5-minute TTL cache for faster repeat queries
 - **Fallback handling** — Falls back to LLM knowledge if search API is unavailable
 - **Keyboard shortcut** — Press Enter to submit, Shift+Enter for new line
 - **Code-split** — Page is lazy-loaded via `React.lazy()`, excluded from the initial bundle
