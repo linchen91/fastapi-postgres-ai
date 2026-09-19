@@ -19,7 +19,7 @@ If you are developing a production application, we recommend using TypeScript wi
 
 ### AI Summary 404
 
-`AISummary.jsx` previously constructed the API URL with a double slash (`${config.API_BASE_URL}/ai/summary` → `http://127.0.0.1:8000//ai/summary`), which returned a 404. The leading `/` was removed to produce the correct single-slash path (`${config.API_BASE_URL}ai/summary`).
+`AISummary.jsx` previously constructed the API URL with a double slash (`${config.API_BASE_URL}/ai/summary` → `http://127.0.0.1:8001/ai/summary`), which returned a 404. The leading `/` was removed to produce the correct single-slash path (`${config.API_BASE_URL}ai/summary`).
 
 ### WebSocket cleanup race
 

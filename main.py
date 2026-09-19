@@ -1,15 +1,40 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 import warnings
 from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
 warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 from core.security import get_current_user
 from fastapi.openapi.utils import get_openapi
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse
 from routers import auth, user, device, role, event, ai_summary, traffic, news, ai_search
 from routers.news import preload_cache
 import uvicorn
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from api_io_log import ApiIOMiddleware
+
+STATIC_DIR = Path(__file__).parent / "static"
+API_PATHS = ("/docs", "/redoc", "/openapi.json", "/auth", "/ai")
+
+
+class SPAMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        is_api_call = any(path.startswith(p) for p in API_PATHS)
+        if not is_api_call:
+            file_path = STATIC_DIR / path.lstrip("/")
+            if file_path.is_file():
+                return FileResponse(file_path)
+        accept = request.headers.get("accept", "")
+        is_browser = "text/html" in accept
+        if is_browser and not is_api_call:
+            index = STATIC_DIR / "index.html"
+            if index.is_file():
+                return HTMLResponse(content=index.read_text())
+        return await call_next(request)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -17,6 +42,8 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(SPAMiddleware)
 
 app.add_middleware(ApiIOMiddleware)
 
@@ -63,4 +90,4 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)

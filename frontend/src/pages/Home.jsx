@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useConfig } from '../configContext'
 import axios from '../axios'
-import AiSummary from '../components/AiSummary'
+import AISummary from '../components/AISummary'
 import { Pie, Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend} from 'chart.js'
 
@@ -100,7 +100,7 @@ const Home = () => {
                 <div className='col-md-3 mb-3'>
                     <div className='card bg-primary p-3 text-center text-white'>
                         <h5>AI Summary</h5>
-                        <div className='fs-2'><AiSummary stats={stats} /></div>
+                        <div className='fs-2'><AISummary stats={stats} /></div>
                     </div>
                 </div>
                 <div className='col-md-3 mb-3'>

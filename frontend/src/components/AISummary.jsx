@@ -3,7 +3,7 @@ import { useConfig } from '../configContext'
 import axios from '../axios'
 import { Modal } from 'bootstrap'
 
-const AiSummary = ({ stats }) => {
+const AISummary = ({ stats }) => {
     const config = useConfig();
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(false);
@@ -71,4 +71,4 @@ const AiSummary = ({ stats }) => {
     )
 };
 
-export default AiSummary;
+export default AISummary;

@@ -54,7 +54,7 @@ async def ai_summary(payload: dict):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:8000",  # Example referrer, adjust as needed
+        "HTTP-Referer": "http://localhost:8001",  # Example referrer, adjust as needed
         "X-Title": "AI Summary Request"  # Example title, adjust as needed
     }
 

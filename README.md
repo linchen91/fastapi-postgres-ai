@@ -42,7 +42,12 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   └── package.json
 ├── api_io_log.py          # Request/response logging middleware
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
+├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
+├── Dockerfile             # Multi-stage build (frontend + backend)
+├── docker-compose.yml     # Docker Compose config (PostgreSQL + API)
+├── requirements.txt       # Python dependencies
+├── .dockerignore          # Docker build exclusions
 ├── service.py             # Test service
 └── test.py                # PostgreSQL + vector search test (LangChain + LlamaIndex with OpenRouter)
 ```
@@ -70,7 +75,7 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 python main.py
 ```
 
-Starts the FastAPI server on `http://0.0.0.0:8000` with auto-reload.
+Starts the FastAPI server on `http://0.0.0.0:8001` with auto-reload.
 
 ### Frontend
 
@@ -82,9 +87,64 @@ npm run dev
 
 Starts the Vite dev server (default: `http://localhost:5173`).
 
+### Docker
+
+Build and run with Docker Compose (includes PostgreSQL + API):
+
+```bash
+docker compose up --build
+```
+
+This starts:
+- **db** — PostgreSQL 16 on port `5432`
+- **api** — FastAPI app on port `8001` (serves built frontend from `static/`)
+
+To run in background:
+
+```bash
+docker compose up -d --build
+```
+
+To stop and remove volumes:
+
+```bash
+docker compose down -v
+```
+
+**Environment variables** can be set in a `.env` file or exported before running:
+
+```bash
+export OPENROUTER_API_KEY=your-key
+export TAVILY_API_KEY=your-key
+docker compose up --build
+```
+
 ## CORS
 
 The backend allows all origins (`*`), methods, and headers for development. Restrict `allow_origins` in [main.py](main.py#L10-L16) for production.
+
+## Database Auto-Creation
+
+On startup, the app automatically creates all database tables defined by SQLAlchemy models (`Base.metadata.create_all()`). No manual migration step is needed — just ensure the PostgreSQL instance is running and accessible.
+
+## SPA Static File Serving
+
+When a `static/` directory exists (built frontend), the app serves it as a single-page application:
+
+- `/assets/*` — served as static files
+- All other routes — serve `index.html` (React Router handles client-side routing)
+- API routes (`/docs`, `/redoc`, `/openapi`, `/auth/*`, `/users/*`, etc.) are not affected
+
+To build and serve the frontend:
+
+```bash
+cd frontend
+npm install
+npm run build
+cp -r dist ../static
+```
+
+Or use Docker Compose, which builds the frontend automatically.
 
 ## Request/Response Logging
 
@@ -105,7 +165,7 @@ Binary request/response bodies are logged as `<N bytes binary>` instead of raw c
 
 ## API Docs
 
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8001/docs
 
 All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization: Bearer <token>` header.
 
