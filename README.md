@@ -7,6 +7,8 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 ```
 ├── main.py                # App entry point, CORS config, router registration
 ├── database.py            # DB connection & session factory
+├── llmbase.py             # Shared LLM (OpenRouter) and Tavily client singletons
+├── api_io_log.py          # Request/response logging middleware
 ├── core/
 │   └── security.py        # JWT auth, password hashing, OAuth2 scheme
 ├── models/
@@ -34,13 +36,20 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   └── news.py            # Traffic news endpoint (BR.de traffic data + cache)
 ├── frontend/              # React + Vite frontend application
 │   ├── src/
-│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events, News, LangGraph pages
+│   │   ├── pages/         # Login, Home, Users, Devices, DevicesMap, Roles, Events, News, AISearch pages
 │   │   ├── components/    # Sidebar, AISummary components
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   ├── configContext.jsx  # App configuration context
 │   │   └── eventsContext.jsx  # Real-time events context (WebSocket + REST)
 │   └── package.json
-├── api_io_log.py          # Request/response logging middleware
+├── k8s/                   # Kubernetes deployment manifests
+│   ├── namespace.yml      # Namespace: fastapi-postgres
+│   ├── configmap.yml      # Non-sensitive config (POSTGRES_HOST/PORT/DB, OPENROUTER_URL)
+│   ├── secret.yml         # Sensitive config (POSTGRES credentials, SECRET_KEY, API keys)
+│   ├── postgres-deployment.yml  # PostgreSQL 16-alpine deployment with liveness/readiness probes
+│   ├── postgres-service.yml     # ClusterIP service for PostgreSQL
+│   ├── api-deployment.yml       # API deployment with env from ConfigMap/Secret, health probes
+│   └── api-service.yml          # NodePort service for API
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
@@ -48,6 +57,7 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 ├── docker-compose.yml     # Docker Compose config (PostgreSQL + API)
 ├── requirements.txt       # Python dependencies
 ├── .dockerignore          # Docker build exclusions
+├── .gitignore             # Git ignore rules
 ├── service.py             # Test service
 └── test.py                # PostgreSQL + vector search test (LangChain + LlamaIndex with OpenRouter)
 ```
@@ -118,6 +128,40 @@ export OPENROUTER_API_KEY=your-key
 export TAVILY_API_KEY=your-key
 docker compose up --build
 ```
+
+### Kubernetes
+
+Deploy to a Kubernetes cluster using the manifests in `k8s/`:
+
+```bash
+# Create namespace and apply all resources
+kubectl apply -f k8s/namespace.yml
+kubectl apply -f k8s/configmap.yml
+kubectl apply -f k8s/secret.yml
+kubectl apply -f k8s/postgres-deployment.yml
+kubectl apply -f k8s/postgres-service.yml
+kubectl apply -f k8s/api-deployment.yml
+kubectl apply -f k8s/api-service.yml
+```
+
+Or apply everything at once:
+
+```bash
+kubectl apply -f k8s/
+```
+
+**Resources created:**
+- **Namespace** — `fastapi-postgres`
+- **ConfigMap** (`app-config`) — non-sensitive settings (DB host/port/name, LLM base URL)
+- **Secret** (`app-secrets`) — sensitive values (DB credentials, `SECRET_KEY`, API keys)
+- **PostgreSQL** — `postgres:16-alpine` with emptyDir volume, liveness/readiness probes via `pg_isready`
+- **API** — `fastapi-postgres-ai:latest` (`imagePullPolicy: Never`, expects locally built image), liveness/readiness probes on `/docs`
+
+**API service** type is `NodePort` — access via `<node-ip>:<node-port>`. PostgreSQL uses `ClusterIP` (internal only).
+
+> **Note:** The API image must be built and available to the cluster before deploying. Since `imagePullPolicy: Never`, load the image into your cluster's container runtime first (e.g. `minikube image load fastapi-postgres-ai:latest`).
+
+Edit `k8s/secret.yml` before deploying — replace placeholder values with real credentials.
 
 ## CORS
 
@@ -428,7 +472,7 @@ Backend endpoint: `GET /news` (no auth required).
 
 ![Search Assistant](./Search_Assistant.png)
 
-The [Search Assistant](frontend/src/pages/LangGraph.jsx) page provides an AI-powered chat interface for real-time web searches:
+The [Search Assistant](frontend/src/pages/AISearch.jsx) page provides an AI-powered chat interface for real-time web searches:
 
 - **Chat interface** — Type questions in a chat-style UI with message history
 - **LangGraph workflow** — 3-step pipeline: query understanding → web search → answer generation

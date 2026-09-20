@@ -28,9 +28,13 @@ class SPAMiddleware(BaseHTTPMiddleware):
             file_path = STATIC_DIR / path.lstrip("/")
             if file_path.is_file():
                 return FileResponse(file_path)
+        # For browser page navigation (GET + Accept: text/html), always serve
+        # index.html so React Router handles client-side routing.  This fixes
+        # page-refresh 405 errors on SPA routes that share a prefix with API
+        # paths (e.g. /ai/search).  Axios API calls use Accept: application/json
+        # and pass through to the backend router unchanged.
         accept = request.headers.get("accept", "")
-        is_browser = "text/html" in accept
-        if is_browser and not is_api_call:
+        if "text/html" in accept and request.method == "GET":
             index = STATIC_DIR / "index.html"
             if index.is_file():
                 return HTMLResponse(content=index.read_text())
