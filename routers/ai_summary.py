@@ -65,7 +65,7 @@ async def ai_summary(payload: dict):
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(OPENROUTER_URL, headers=headers, json=data)
+        r = await client.post(f"{OPENROUTER_URL}/chat/completions", headers=headers, json=data)
 
         if r.status_code != 200:
             raise HTTPException(status_code=r.status_code, detail="Error from OpenRouter API.")

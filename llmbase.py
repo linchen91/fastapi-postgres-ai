@@ -10,7 +10,7 @@ def _get_openrouter_config():
     if _tavily_client is None:
         load_dotenv(override=True)
     api_key = os.getenv("OPENROUTER_API_KEY")
-    base_url = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
+    base_url = os.getenv("OPENROUTER_URL", "https://openrouter.ai/api/v1")
     model_id = os.getenv("OPENROUTER_MODEL")
     if not api_key or not base_url or not model_id:
         raise ValueError("OpenRouter API configuration is missing.")

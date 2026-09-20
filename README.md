@@ -58,10 +58,9 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 | `POSTGRES_DB` | dzservice | Database name |
 | `SECRET_KEY` | - | JWT signing key (required) |
 | `OPENROUTER_API_KEY` | - | OpenRouter API key for AI summaries |
-| `OPENROUTER_URL` | - | OpenRouter API endpoint URL |
 | `OPENROUTER_MODEL` | - | OpenRouter model identifier, identifier for LangGraph |
 | `TAVILY_API_KEY` | - | Tavily API key for web search (required for LangGraph) |
-| `LLM_BASE_URL` | https://openrouter.ai/api/v1 | LLM API base URL for LangGraph |
+| `OPENROUTER_URL` | https://openrouter.ai/api/v1 | LLM API base URL for LangGraph |
 
 ## Run
 
@@ -330,7 +329,7 @@ A real-world search system powered by LangGraph, Tavily API, and OpenRouter LLM:
 
 Backend endpoint: `POST /ai/search` with `{ "query": "<user question>" }`.
 
-Requires `TAVILY_API_KEY`, `LLM_BASE_URL`, and `OPENROUTER_MODEL` environment variables.
+Requires `TAVILY_API_KEY`, `OPENROUTER_URL`, and `OPENROUTER_MODEL` environment variables.
 
 ### Configuration
 
