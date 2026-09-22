@@ -1,0 +1,19 @@
+image: hashicorp/terraform:1.9.5
+
+definitions:
+  caches:
+    terraform:
+      paths:
+        - terraform/.terraform
+
+pipelines:
+  default:
+    - step:
+        name: Terraform fmt, validate & test
+        image: hashicorp/terraform:1.9.5
+        caches:
+          - terraform
+        script:
+          - apk add --no-cache bash
+          - chmod +x scripts/test-terraform.sh
+          - ./scripts/test-terraform.sh

@@ -50,6 +50,20 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   ├── postgres-service.yml     # ClusterIP service for PostgreSQL
 │   ├── api-deployment.yml       # API deployment with env from ConfigMap/Secret, health probes
 │   └── api-service.yml          # NodePort service for API
+├── terraform/             # Terraform config (Kubernetes provider, mirrors k8s/)
+│   ├── versions.tf        # Terraform + provider version constraints
+│   ├── providers.tf       # Kubernetes provider (kubeconfig via config_path)
+│   ├── variables.tf       # All tunables (namespace, DB, secrets, images, ports)
+│   ├── namespace.tf       # Namespace resource
+│   ├── config.tf          # ConfigMap + Secret
+│   ├── postgres.tf        # PostgreSQL Deployment + ClusterIP Service
+│   ├── api.tf             # API Deployment + NodePort Service
+│   ├── outputs.tf         # namespace / service names / node port
+│   ├── terraform.tfvars.example  # Placeholder values (copy to terraform.tfvars)
+│   └── tests/plan.tftest.hcl     # Offline plan assertions (terraform test)
+├── scripts/
+│   └── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
+├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (runs terraform tests)
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
@@ -162,6 +176,33 @@ kubectl apply -f k8s/
 > **Note:** The API image must be built and available to the cluster before deploying. Since `imagePullPolicy: Never`, load the image into your cluster's container runtime first (e.g. `minikube image load fastapi-postgres-ai:latest`).
 
 Edit `k8s/secret.yml` before deploying — replace placeholder values with real credentials.
+
+### Terraform Deployment
+
+[terraform/](terraform/) manages the same resources as the raw YAML in `k8s/`, using the Kubernetes provider. The raw manifests remain available as an alternative.
+
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+# edit terraform/terraform.tfvars — set real secrets (gitignored)
+
+terraform -chdir=terraform init
+terraform -chdir=terraform plan
+terraform -chdir=terraform apply
+```
+
+**Prerequisites:** a reachable Kubernetes cluster and a valid kubeconfig (`config_path`, default `~/.kube/config`). Build/load the API image first (`minikube image load fastapi-postgres-ai:latest`) — `api_image_pull_policy` defaults to `Never`, matching `k8s/`.
+
+Key variables (see [terraform/variables.tf](terraform/variables.tf)): `namespace`, `postgres_*`, `secret_key`, `openrouter_api_key`, `openrouter_model`, `tavily_api_key`, `api_image`, `api_node_port`. State is local (`terraform/terraform.tfstate`, gitignored).
+
+### Terraform Tests
+
+```bash
+./scripts/test-terraform.sh
+```
+
+Runs `terraform fmt -check`, `init -backend=false`, `validate`, and native `terraform test` plan assertions ([terraform/tests/plan.tftest.hcl](terraform/tests/plan.tftest.hcl)). Tests are fully offline — a dummy kubeconfig is generated automatically; **no cluster, credentials, or real secrets are required**.
+
+[bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs the same script on every push via Bitbucket Pipelines.
 
 ## CORS
 

@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and fill in real values before applying.
+# terraform.tfvars is gitignored — never commit real secrets.
+
+config_path = "~/.kube/config"
+
+namespace = "fastapi-postgres"
+
+# PostgreSQL
+postgres_user     = "postgres"
+postgres_password = "changeme"
+postgres_db       = "dzservice"
+postgres_host     = "postgres"
+postgres_port     = "5432"
+postgres_image    = "postgres:16-alpine"
+
+# Application secrets
+secret_key         = "changeme-jwt-signing-key"
+openrouter_api_key = "sk-or-v1-placeholder"
+openrouter_model   = "openrouter/free"
+openrouter_url     = "https://openrouter.ai/api/v1"
+tavily_api_key     = "tvly-placeholder"
+
+# API
+api_image             = "fastapi-postgres-ai:latest"
+api_image_pull_policy = "Never"
+# api_node_port       = 30081 # optional; omit to let Kubernetes assign
