@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from schemas.user import LoginRequest
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from database import get_db
 from models.user import User
 from core import security
@@ -8,8 +9,9 @@ from core import security
 router = APIRouter(prefix='/auth', tags=['Auth'])
 
 @router.post('/token')
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.Account == data.account).first()
+async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.Account == data.account))
+    user = result.scalars().first()
     if not user or not security.verif_password(data.password, user.Pwd):
         raise HTTPException(status_code=400, detail='Account or Password error')
     if user.IsActive == 0:

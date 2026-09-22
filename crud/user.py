@@ -1,16 +1,19 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from models.user import User
 from schemas.user import UserCreate, UserUpdate
 from datetime import datetime
 from core import security
 
-def get_users(db: Session):
-    return db.query(User).all()
+async def get_users(db: AsyncSession):
+    result = await db.execute(select(User))
+    return result.scalars().all()
 
-def get_user(db: Session, user_id: int):
-    return db.query(User).filter(User.Id == user_id).first()
+async def get_user(db: AsyncSession, user_id: int):
+    result = await db.execute(select(User).where(User.Id == user_id))
+    return result.scalars().first()
 
-def create_user(db: Session, user: UserCreate):
+async def create_user(db: AsyncSession, user: UserCreate):
     db_user = User(
         Account = user.Account,
         Name = user.Name,
@@ -20,12 +23,12 @@ def create_user(db: Session, user: UserCreate):
         RoleId = user.RoleId,
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
-def update_user(db: Session, user_id:int, user: UserUpdate):
-    db_user = get_user(db, user_id)
+async def update_user(db: AsyncSession, user_id:int, user: UserUpdate):
+    db_user = await get_user(db, user_id)
     if not db_user:
         return None
     for key, value in user.dict(exclude_unset=True).items():
@@ -33,13 +36,13 @@ def update_user(db: Session, user_id:int, user: UserUpdate):
             value = security.get_password_hash(value)
         setattr(db_user, key, value)
     db_user.UpdatedDate = datetime.utcnow()
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
-def delete_user(db: Session, user_id: int):
-    db_user = get_user(db, user_id)
+async def delete_user(db: AsyncSession, user_id: int):
+    db_user = await get_user(db, user_id)
     if db_user:
         db.delete(db_user)
-        db.commit()
+        await db.commit()
     return db_user

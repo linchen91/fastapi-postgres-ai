@@ -2,17 +2,17 @@
 
 [![Bitbucket Pipelines](https://bitbucket.org/linchen91/fastapi-postgres-ai/branch/main/pipelines.svg)](https://bitbucket.org/linchen91/fastapi-postgres-ai/pipelines)
 
-FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT authentication, AI-powered features, and a React frontend.
+FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), featuring JWT authentication, AI-powered features, and a React frontend.
 
 ## Project Structure
 
 ```
 ├── main.py                # App entry point, CORS config, router registration
-├── database.py            # DB connection & session factory
+├── database.py            # Async DB engine & session factory (asyncpg)
 ├── llmbase.py             # Shared LLM (OpenRouter) and Tavily client singletons
 ├── api_io_log.py          # Request/response logging middleware
 ├── core/
-│   └── security.py        # JWT auth, password hashing, OAuth2 scheme
+│   └── security.py        # JWT auth, password hashing, OAuth2 scheme, async current-user dependency
 ├── models/
 │   ├── user.py            # SQLAlchemy User model
 │   ├── device.py          # SQLAlchemy Device model
@@ -23,9 +23,9 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   ├── device.py          # Pydantic Device schemas (Create, Update, Out)
 │   └── role.py            # Pydantic Role schemas (CreateDto, UpdateDto, RoleDto, DeviceDto)
 ├── crud/
-│   ├── user.py            # User CRUD operations
-│   ├── device.py          # Device CRUD operations
-│   └── role.py            # Role CRUD operations (with device associations)
+│   ├── user.py            # User CRUD operations (async)
+│   ├── device.py          # Device CRUD operations (async)
+│   └── role.py            # Role CRUD operations with device associations (async)
 ├── routers/
 │   ├── auth.py            # Auth endpoints (login, hash password)
 │   ├── user.py            # User API endpoints
@@ -282,9 +282,11 @@ Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/pl
 
 The backend allows all origins (`*`), methods, and headers for development. Restrict `allow_origins` in [main.py](main.py#L10-L16) for production.
 
-## Database Auto-Creation
+## Database Schema
 
-On startup, the app automatically creates all database tables defined by SQLAlchemy models (`Base.metadata.create_all()`). No manual migration step is needed — just ensure the PostgreSQL instance is running and accessible.
+The app does **not** run migrations or create tables on startup — `Base.metadata.create_all()` is never called. The PostgreSQL database must already contain the tables defined by the SQLAlchemy models in [models/](models/) before the API can serve requests. Create them manually (e.g. via `psql` or a migration tool of your choice).
+
+`psycopg2-binary` remains in requirements only for the standalone [test.py](test.py) script; the API itself uses `asyncpg`.
 
 ## SPA Static File Serving
 

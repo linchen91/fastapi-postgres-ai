@@ -1,6 +1,6 @@
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 from urllib.parse import quote_plus
 
 # username = os.getenv('MYSQL_USER', 'dzuser')
@@ -17,16 +17,12 @@ host = os.getenv('POSTGRES_HOST', 'localhost')
 port = os.getenv('POSTGRES_PORT', '5432')
 db = os.getenv('POSTGRES_DB', 'dzservice')
 
-DATABASE_URL = f'postgresql+psycopg2://{username}:{password}@{host}:{port}/{db}'
+DATABASE_URL = f'postgresql+asyncpg://{username}:{password}@{host}:{port}/{db}'
 
-engine = create_engine(DATABASE_URL, echo=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_async_engine(DATABASE_URL, echo=True)
+AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-def get_db():
-    db = SessionLocal()
-    try:
+async def get_db():
+    async with AsyncSessionLocal() as db:
         yield db
-    finally:
-        db.close()
-

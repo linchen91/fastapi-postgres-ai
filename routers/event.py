@@ -5,8 +5,9 @@ from datetime import datetime, timezone, timedelta
 import asyncio
 
 from core.security import get_current_user, decode_token
-from database import get_db
-from sqlalchemy.orm import Session
+from database import get_db, AsyncSessionLocal
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.device import Device
 from models.user import User
 
@@ -85,7 +86,7 @@ async def get_events(current_user: User = Depends(get_current_user)):
         return list(EVENTS.values())
 
 @router.post('', response_model=EventOut)
-async def add_events(event: EventIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def add_events(event: EventIn, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     out = EventOut(
         deviceid = event.deviceid.strip(),
         devicename = event.devicename.strip(),
@@ -99,33 +100,28 @@ async def add_events(event: EventIn, current_user: User = Depends(get_current_us
     await manager.broadcast_json({"kind": "event", "payload": out.dict()})
 
     try:
-        dev = (
-            db.query(Device)
-            .filter(Device.Code == out.deviceid)
-            .first()
-        )
+        result = await db.execute(select(Device).where(Device.Code == out.deviceid))
+        dev = result.scalars().first()
         if not dev and out.deviceid.isdigit():
-            dev = (
-                db.query(Device)
-                .filter(Device.Code == int(out.deviceid))
-                .first()
-            )
+            result = await db.execute(select(Device).where(Device.Code == int(out.deviceid)))
+            dev = result.scalars().first()
         if dev:
             dev.Status = out.status
             dev.UpdatedDate = datetime.strptime(out.eventtime, '%Y-%m-%d %H:%M:%S')
-            db.commit()
+            await db.commit()
     except Exception:
-        db.rollback()
+        await db.rollback()
 
     return out
 
-async def _validate_ws_token(token: str, db: Session) -> User:
+async def _validate_ws_token(token: str, db: AsyncSession) -> User:
     try:
         payload = decode_token(token)
         username = payload.get('sub')
         if not username:
             raise HTTPException(status_code=401, detail='Token invalide')
-        user = db.query(User).filter(User.Account == username).first()
+        result = await db.execute(select(User).where(User.Account == username))
+        user = result.scalars().first()
         if not user:
             raise HTTPException(status_code=401, detail='User not exist')
         return user
@@ -134,16 +130,16 @@ async def _validate_ws_token(token: str, db: Session) -> User:
 
 @router.websocket('/ws')
 async def ws_events(websocket: WebSocket, token: Optional[str] = Query(default=None)):
-    from database import SessionLocal
-    db = SessionLocal()
+    db = AsyncSessionLocal()
     try:
         if not token:
             await websocket.close(code=4401)
+            await db.close()
             return
-        _ = await asyncio.get_event_loop().run_in_executor(None, _validate_ws_token, token, db)
+        _ = await _validate_ws_token(token, db)
     except Exception:
         await websocket.close(code=4401)
-        db.close()
+        await db.close()
         return
     await manager.connect(websocket)
     try:
@@ -162,4 +158,4 @@ async def ws_events(websocket: WebSocket, token: Optional[str] = Query(default=N
         pass
     finally:
         await manager.disconnect(websocket)
-        db.close()
+        await db.close()
