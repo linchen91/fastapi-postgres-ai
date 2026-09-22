@@ -1,19 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from database import SessionLocal
+from database import get_db
 from crud import device as crud_device
 from schemas import device as schemas_device
 from typing import Optional
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.get('/', response_model=list[schemas_device.DeviceOut])
 def read_devices(user_account: Optional[str] = None, db: Session = Depends(get_db)):
