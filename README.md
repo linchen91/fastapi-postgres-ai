@@ -1,5 +1,7 @@
 # FastAPI + PostgreSQL + AI
 
+[![Bitbucket Pipelines](https://bitbucket.org/linchen91/fastapi-postgres-ai/branch/main/pipelines.svg)](https://bitbucket.org/linchen91/fastapi-postgres-ai/pipelines)
+
 FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT authentication, AI-powered features, and a React frontend.
 
 ## Project Structure
@@ -61,9 +63,22 @@ FastAPI REST API with PostgreSQL database using SQLAlchemy ORM, featuring JWT au
 │   ├── outputs.tf         # namespace / service names / node port
 │   ├── terraform.tfvars.example  # Placeholder values (copy to terraform.tfvars)
 │   └── tests/plan.tftest.hcl     # Offline plan assertions (terraform test)
+├── ansible/               # Ansible deployment (Docker host + compose stack)
+│   ├── ansible.cfg        # Inventory/roles defaults (run playbooks from ansible/)
+│   ├── .ansible-lint      # Lint profile for CI
+│   ├── inventory/
+│   │   ├── hosts.yml      # Deploy targets (group: app) + local test group
+│   │   └── group_vars/all.yml  # Non-secret tunables (app_root, app_repo, api_port)
+│   ├── vars/vault.yml.example  # Secret placeholders (copy to vault.yml, gitignored)
+│   ├── playbooks/deploy.yml    # Install Docker, clone repo, compose up, health check
+│   ├── playbooks/test_config.yml  # Offline contract assertions (ansible test)
+│   └── roles/
+│       ├── docker/        # Docker engine + compose plugin install
+│       └── app/           # Git deploy, .env + override templates, compose up
 ├── scripts/
-│   └── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
-├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (runs terraform tests)
+│   ├── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
+│   └── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
+├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (runs terraform & ansible tests)
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
@@ -202,7 +217,66 @@ Key variables (see [terraform/variables.tf](terraform/variables.tf)): `namespace
 
 Runs `terraform fmt -check`, `init -backend=false`, `validate`, and native `terraform test` plan assertions ([terraform/tests/plan.tftest.hcl](terraform/tests/plan.tftest.hcl)). Tests are fully offline — a dummy kubeconfig is generated automatically; **no cluster, credentials, or real secrets are required**.
 
-[bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs the same script on every push via Bitbucket Pipelines.
+**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs the same script in `hashicorp/terraform:1.9.5` on every push to this repository (Bitbucket workspace `linchen91`). Locally and in CI the entrypoint is identical: `./scripts/test-terraform.sh`.
+
+Repository remotes:
+
+| Remote | URL |
+|--------|-----|
+| `origin` | `https://github.com/linchen91/fastapi-postgres-ai.git` |
+| `bitbucket` | `https://bitbucket.org/linchen91/fastapi-postgres-ai.git` (triggers Pipelines on push) |
+
+### Ansible Deployment
+
+[ansible/](ansible/) provisions a Linux host over SSH: installs Docker, clones this repository, writes runtime config from vault variables, and brings up the Docker Compose stack (the same stack as `docker compose up --build`).
+
+**Prerequisites:** a reachable Linux host (Debian/Ubuntu or RHEL family) with SSH access, and `ansible-core` on the control machine (`pip install ansible-core`).
+
+```bash
+cp ansible/vars/vault.yml.example ansible/vars/vault.yml
+# edit ansible/vars/vault.yml — set real secrets (gitignored)
+# edit ansible/inventory/hosts.yml — replace 192.0.2.10 with your host IP
+
+cd ansible
+ansible-playbook playbooks/deploy.yml
+```
+
+Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolves the inventory and roles path automatically.
+
+**What it does:**
+
+1. Loads `vars/vault.yml.example`, overridden by `vars/vault.yml` when present (same workflow as `terraform.tfvars`)
+2. **docker role** — installs `docker.io` + `docker-compose-v2` (Debian family) or `docker` + `docker-compose-plugin` (RedHat family), enables the service, creates `app_user`, and adds it to the `docker` group
+3. **app role** — clones the repo to `app_root`, templates `.env` (OpenRouter/Tavily keys interpolated by docker-compose) and `docker-compose.override.yml` (replaces the base file's hardcoded `SECRET_KEY` and DB password), runs `docker compose up -d --build`, then waits for `http://localhost:8001/docs`
+
+**Key variables** (defaults in [ansible/inventory/group_vars/all.yml](ansible/inventory/group_vars/all.yml), secrets in [ansible/vars/vault.yml.example](ansible/vars/vault.yml.example)):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `app_name` | fastapi-postgres-ai | Application name |
+| `app_root` | /opt/fastapi-postgres-ai | Deployment directory on the target host |
+| `app_repo` | bitbucket URL | Git repository to clone |
+| `app_version` | main | Git ref to deploy |
+| `app_user` | deploy | System user added to the docker group |
+| `api_port` | 8001 | API port used for the health check |
+| `secret_key` | (placeholder) | JWT signing key — override in `vault.yml` |
+| `postgres_user` | (placeholder) | PostgreSQL username — override in `vault.yml` |
+| `postgres_password` | (placeholder) | PostgreSQL password — override in `vault.yml` |
+| `postgres_db` | (placeholder) | PostgreSQL database name — override in `vault.yml` |
+| `openrouter_api_key` / `openrouter_model` / `openrouter_url` | (placeholder) | OpenRouter LLM settings |
+| `tavily_api_key` | (placeholder) | Tavily search API key |
+
+**Inventory:** the `app` group holds deploy targets (default host `app-server`); the `local` group is used only by the offline tests. All modules are `ansible.builtin` — **no Galaxy collections to install**.
+
+### Ansible Tests
+
+```bash
+./scripts/test-ansible.sh
+```
+
+Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (renders both templates with placeholder secrets and asserts inventory/group-var contracts — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, Docker, cluster, credentials, or real secrets are required**.
+
+**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`) and `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`) on every push. Locally and in CI the entrypoints are identical.
 
 ## CORS
 

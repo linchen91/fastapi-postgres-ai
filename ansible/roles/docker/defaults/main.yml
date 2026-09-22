@@ -1,0 +1,8 @@
+---
+docker_packages_debian:
+  - docker.io
+  - docker-compose-v2
+
+docker_packages_redhat:
+  - docker
+  - docker-compose-plugin

@@ -17,3 +17,10 @@ pipelines:
           - apk add --no-cache bash
           - chmod +x scripts/test-terraform.sh
           - ./scripts/test-terraform.sh
+    - step:
+        name: Ansible lint, syntax-check & tests
+        image: python:3.12-slim
+        script:
+          - pip install --quiet ansible-core ansible-lint
+          - chmod +x scripts/test-ansible.sh
+          - ./scripts/test-ansible.sh

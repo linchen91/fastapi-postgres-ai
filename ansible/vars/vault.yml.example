@@ -1,0 +1,13 @@
+---
+# Copy to vault.yml (gitignored) and fill in real values before deploying —
+# same workflow as terraform/terraform.tfvars.example.
+# These placeholders keep offline tests free of real secrets.
+
+secret_key: "changeme-jwt-signing-key"
+postgres_user: "postgres"
+postgres_password: "changeme"
+postgres_db: "dzservice"
+openrouter_api_key: "sk-or-v1-placeholder"
+openrouter_model: "openrouter/free"
+openrouter_url: "https://openrouter.ai/api/v1"
+tavily_api_key: "tvly-placeholder"

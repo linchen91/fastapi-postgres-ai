@@ -1,0 +1,44 @@
+---
+- name: Ensure application root exists
+  ansible.builtin.file:
+    path: "{{ app_root }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone or update application repository
+  ansible.builtin.git:
+    repo: "{{ app_repo }}"
+    dest: "{{ app_root }}"
+    version: "{{ app_version }}"
+
+- name: Write docker-compose environment file (.env)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ app_root }}/.env"
+    mode: "0600"
+
+- name: Write docker-compose override (secret overrides)
+  ansible.builtin.template:
+    src: docker-compose.override.yml.j2
+    dest: "{{ app_root }}/docker-compose.override.yml"
+    mode: "0600"
+
+- name: Build and start the application stack
+  ansible.builtin.command:
+    cmd: docker compose up -d --build
+    chdir: "{{ app_root }}"
+  register: app_compose_up
+  changed_when: >-
+    'Started' in app_compose_up.stdout
+    or 'Recreated' in app_compose_up.stdout
+    or 'Created' in app_compose_up.stdout
+    or 'Built' in app_compose_up.stdout
+
+- name: Wait for the API health endpoint
+  ansible.builtin.uri:
+    url: "{{ app_health_url }}"
+    status_code: 200
+  register: app_api_health
+  retries: "{{ app_health_retries }}"
+  delay: "{{ app_health_delay }}"
+  until: app_api_health.status | default(-1) == 200

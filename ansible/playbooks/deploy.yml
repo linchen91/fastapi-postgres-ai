@@ -1,0 +1,20 @@
+---
+- name: Deploy FastAPI + PostgreSQL stack with Docker Compose
+  hosts: app
+  # Security: only escalate on remote hosts; local connection uses invoking user's docker access.
+  become: "{{ ansible_connection != 'local' }}"
+  vars_files:
+    - ../vars/vault.yml.example
+  pre_tasks:
+    - name: Check for local vault overrides
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../vars/vault.yml"
+      register: vault_override
+
+    - name: Load local vault overrides
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/vault.yml"
+      when: vault_override.stat.exists
+  roles:
+    - docker
+    - app

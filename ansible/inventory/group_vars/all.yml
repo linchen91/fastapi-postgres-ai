@@ -1,0 +1,9 @@
+---
+# Non-secret deployment tunables (see vars/vault.yml.example for secrets).
+
+app_name: fastapi-postgres-ai
+app_root: /opt/fastapi-postgres-ai
+app_repo: https://bitbucket.org/linchen91/fastapi-postgres-ai.git
+app_version: main
+app_user: deploy
+api_port: 8001

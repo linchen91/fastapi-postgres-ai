@@ -20,3 +20,7 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 .terraform.tfstate.lock.info
+
+# Ansible
+*.retry
+ansible/vars/vault.yml

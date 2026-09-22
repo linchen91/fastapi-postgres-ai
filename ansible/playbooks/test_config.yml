@@ -1,0 +1,87 @@
+---
+- name: Offline configuration assertions (no hosts, cluster, or secrets required)
+  hosts: local
+  gather_facts: false
+  vars:
+    env_template: "{{ playbook_dir }}/../roles/app/templates/env.j2"
+    override_template: "{{ playbook_dir }}/../roles/app/templates/docker-compose.override.yml.j2"
+    deploy_playbook: "{{ playbook_dir }}/deploy.yml"
+    app_tasks_file: "{{ playbook_dir }}/../roles/app/tasks/main.yml"
+  tasks:
+    - name: Load secret placeholder defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/vault.yml.example"
+
+    - name: Assert group_vars match the deployment contract
+      ansible.builtin.assert:
+        that:
+          - app_name == 'fastapi-postgres-ai'
+          - app_root == '/opt/fastapi-postgres-ai'
+          - app_version == 'main'
+          - app_user == 'deploy'
+          - api_port | int == 8001
+          - app_repo is defined
+        success_msg: "group_vars/all.yml matches the deployment contract"
+        fail_msg: "group_vars/all.yml deviates from the expected contract"
+
+    - name: Render env.j2 from placeholder vars
+      ansible.builtin.set_fact:
+        rendered_env: "{{ lookup('ansible.builtin.template', env_template) }}"
+
+    - name: Assert rendered .env carries the compose-interpolated keys
+      ansible.builtin.assert:
+        that:
+          - "'OPENROUTER_API_KEY=sk-or-v1-placeholder' in rendered_env"
+          - "'OPENROUTER_URL=https://openrouter.ai/api/v1' in rendered_env"
+          - "'OPENROUTER_MODEL=openrouter/free' in rendered_env"
+          - "'TAVILY_API_KEY=tvly-placeholder' in rendered_env"
+        success_msg: "env.j2 renders the four compose-interpolated keys"
+        fail_msg: "env.j2 must render OPENROUTER_API_KEY/URL/MODEL and TAVILY_API_KEY from the vault placeholders"
+
+    - name: Render docker-compose override from placeholder vars
+      ansible.builtin.set_fact:
+        rendered_override: "{{ lookup('ansible.builtin.template', override_template) }}"
+
+    - name: Assert rendered override replaces the weak hardcoded secrets
+      ansible.builtin.assert:
+        that:
+          - "'SECRET_KEY: \"changeme-jwt-signing-key\"' in rendered_override"
+          - "'POSTGRES_PASSWORD: \"changeme\"' in rendered_override"
+          - "'POSTGRES_DB: \"dzservice\"' in rendered_override"
+          - "'services:' in rendered_override"
+        success_msg: "docker-compose.override.yml.j2 renders the secret overrides"
+        fail_msg: "docker-compose.override.yml.j2 must override SECRET_KEY and the postgres credentials"
+
+    - name: Read deploy playbook and app role tasks
+      ansible.builtin.set_fact:
+        deploy_content: "{{ lookup('ansible.builtin.file', deploy_playbook) }}"
+        app_tasks_content: "{{ lookup('ansible.builtin.file', app_tasks_file) }}"
+
+    - name: Assert deploy playbook targets the app group and wires both roles
+      ansible.builtin.assert:
+        that:
+          - "'hosts: app' in deploy_content"
+          - "'- docker' in deploy_content"
+          - "'- app' in deploy_content"
+        success_msg: "deploy.yml targets hosts: app with roles docker + app"
+        fail_msg: "deploy.yml must target hosts: app and include the docker and app roles"
+
+    - name: Assert app role builds, configures, and health-checks the stack
+      ansible.builtin.assert:
+        that:
+          - "'ansible.builtin.uri' in app_tasks_content"
+          - "'docker compose up -d --build' in app_tasks_content"
+          - "'env.j2' in app_tasks_content"
+          - "'docker-compose.override.yml.j2' in app_tasks_content"
+        success_msg: "app role templates config, runs compose up, and health-checks /docs"
+        fail_msg: "roles/app/tasks/main.yml must template .env + override, run docker compose up, and probe via uri"
+
+    - name: Assert inventory structure
+      ansible.builtin.assert:
+        that:
+          - "'app' in groups"
+          - "'local' in groups"
+          - "groups['app'] | length >= 1"
+          - "groups['app'][0] == 'app-server'"
+        success_msg: "inventory defines the app and local groups as contracted"
+        fail_msg: "inventory must define group app (host app-server) and group local"
