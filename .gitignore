@@ -24,3 +24,6 @@ override.tf.json
 # Ansible
 *.retry
 ansible/vars/vault.yml
+
+# Pytest
+.pytest_cache/

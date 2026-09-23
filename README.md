@@ -78,6 +78,10 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 ├── scripts/
 │   ├── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
 │   └── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
+├── tests/                 # pytest unit tests (offline)
+│   ├── conftest.py        # sys.path bootstrap for test imports
+│   ├── test_ai_summary.py # OpenRouter retry/backoff + error detail tests
+│   └── test_database_pool.py  # connection pool config tests
 ├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (runs terraform & ansible tests)
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
@@ -85,6 +89,7 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 ├── Dockerfile             # Multi-stage build (frontend + backend)
 ├── docker-compose.yml     # Docker Compose config (PostgreSQL + API)
 ├── requirements.txt       # Python dependencies
+├── requirements-dev.txt   # Test dependencies (pytest)
 ├── .dockerignore          # Docker build exclusions
 ├── .gitignore             # Git ignore rules
 ├── service.py             # Test service
@@ -282,6 +287,17 @@ Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolve
 Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (renders both templates with placeholder secrets and asserts inventory/group-var contracts — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, Docker, cluster, credentials, or real secrets are required**.
 
 **CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`) and `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`) on every push. Locally and in CI the entrypoints are identical.
+
+## Unit Tests
+
+Unit tests use **pytest** and live in [tests/](tests/). They cover the async engine connection-pool configuration (`DB_*` env vars, `pool_pre_ping`, recycle, echo) and the AI Summary endpoint's OpenRouter retry/backoff and error-detail behavior.
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/
+```
+
+Tests run fully offline — no database, network access, or API keys required. (Terraform and Ansible have their own test scripts, covered above.)
 
 ## CORS
 
