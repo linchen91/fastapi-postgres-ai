@@ -40,12 +40,12 @@ export default function Login({ setToken, setAccount}) {
           <h2 className='mb-4 text-center'>Login</h2>
           {error && <div className='alert alert-danger'>{error}</div>}
           <div className='mb-3'>
-            <label className='form-label'>Account</label>
-            <input className='form-control' value={account} onChange={e => setAcct(e.target.value)} />
+            <label className='form-label' htmlFor='login-account'>Account</label>
+            <input id='login-account' className='form-control' value={account} onChange={e => setAcct(e.target.value)} />
           </div>
           <div className='mb-3'>
-            <label className='form-label'>Password</label>
-            <input type='password' className='form-control' value={password} onChange={e => setPassword(e.target.value)} />
+            <label className='form-label' htmlFor='login-password'>Password</label>
+            <input id='login-password' type='password' className='form-control' value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           <button className='btn btn-primary w-100' onClick={handleLogin}>Login</button>
         </div>

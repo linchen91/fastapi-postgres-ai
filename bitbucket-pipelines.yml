@@ -5,6 +5,9 @@ definitions:
     terraform:
       paths:
         - terraform/.terraform
+    npm:
+      paths:
+        - ~/.npm
 
 pipelines:
   default:
@@ -24,3 +27,17 @@ pipelines:
           - pip install --quiet ansible-core ansible-lint
           - chmod +x scripts/test-ansible.sh
           - ./scripts/test-ansible.sh
+    - step:
+        name: Frontend e2e (Playwright)
+        # Image version must match @playwright/test in frontend/package.json (1.63.0)
+        # so the preinstalled Chromium matches the npm package.
+        image: mcr.microsoft.com/playwright:v1.63.0-noble
+        caches:
+          - npm
+        script:
+          - cd frontend
+          - npm ci
+          - npm run test:e2e
+        artifacts:
+          - frontend/test-results/**
+          - frontend/playwright-report/**

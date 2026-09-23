@@ -27,3 +27,7 @@ ansible/vars/vault.yml
 
 # Pytest
 .pytest_cache/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/

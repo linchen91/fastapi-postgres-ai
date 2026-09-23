@@ -43,6 +43,8 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   ├── configContext.jsx  # App configuration context
 │   │   └── eventsContext.jsx  # Real-time events context (WebSocket + REST)
+│   ├── tests/             # Playwright e2e tests (offline, API mocked)
+│   ├── playwright.config.js  # Playwright config (auto-starts Vite via webServer)
 │   └── package.json
 ├── k8s/                   # Kubernetes deployment manifests
 │   ├── namespace.yml      # Namespace: fastapi-postgres
@@ -82,7 +84,7 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   ├── conftest.py        # sys.path bootstrap for test imports
 │   ├── test_ai_summary.py # OpenRouter retry/backoff + error detail tests
 │   └── test_database_pool.py  # connection pool config tests
-├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (runs terraform & ansible tests)
+├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (terraform, ansible & Playwright e2e tests)
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
@@ -134,7 +136,7 @@ npm install
 npm run dev
 ```
 
-Starts the Vite dev server (default: `http://localhost:5173`).
+Starts the Vite dev server on `http://127.0.0.1:5173` (bound to IPv4 explicitly — see [frontend/vite.config.js](frontend/vite.config.js)).
 
 ### Docker
 
@@ -286,7 +288,7 @@ Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolve
 
 Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (renders both templates with placeholder secrets and asserts inventory/group-var contracts — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, Docker, cluster, credentials, or real secrets are required**.
 
-**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`) and `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`) on every push. Locally and in CI the entrypoints are identical.
+**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical.
 
 ## Unit Tests
 
@@ -297,7 +299,22 @@ pip install -r requirements-dev.txt
 python -m pytest tests/
 ```
 
-Tests run fully offline — no database, network access, or API keys required. (Terraform and Ansible have their own test scripts, covered above.)
+Tests run fully offline — no database, network access, or API keys required. (Terraform, Ansible, and Playwright have their own test entrypoints, covered above and below.)
+
+## E2E Tests (Playwright)
+
+End-to-end tests use **Playwright** and live in [frontend/tests/](frontend/tests/). They cover the login flow: form render, failed-login error message, and successful login redirect to `/home` with JWT persistence in `localStorage`. API calls are mocked via `page.route` — tests need no backend, database, or API keys.
+
+```bash
+cd frontend
+npm install
+npx playwright install chromium   # first run only
+npm run test:e2e
+```
+
+[frontend/playwright.config.js](frontend/playwright.config.js) starts the Vite dev server automatically (`webServer`) on `http://127.0.0.1:5173` — no manual `npm run dev` required. [frontend/vite.config.js](frontend/vite.config.js) binds `127.0.0.1` explicitly so Playwright's probe can reach the dev server (Vite's default `localhost` may bind only `[::1]` on some systems).
+
+**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `npm ci && npm run test:e2e` in `mcr.microsoft.com/playwright:v1.63.0-noble`. The image version must match `@playwright/test` in [frontend/package.json](frontend/package.json) — bump both together or Chromium lookups fail. On failure, `frontend/test-results/` and `frontend/playwright-report/` are uploaded as build artifacts (both gitignored).
 
 ## CORS
 

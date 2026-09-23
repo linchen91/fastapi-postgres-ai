@@ -17,6 +17,14 @@ If you are developing a production application, we recommend using TypeScript wi
 
 ## Known Fixes
 
+### Vite binds 127.0.0.1 explicitly
+
+`vite.config.js` sets `server.host: '127.0.0.1'` so Playwright's `webServer` probe (and browsers using `127.0.0.1`) can reach the dev server. Vite's default `localhost` may bind only `[::1]` on some systems, which made `npm run test:e2e` time out waiting for the server.
+
+### Login labels not associated with inputs
+
+`Login.jsx` labels had no `htmlFor`/`id` pairing, so screen readers did not announce them for the inputs and Playwright's `getByLabel` could not locate the fields. Added `htmlFor` + `id` on the Account and Password fields.
+
 ### AI Summary 404
 
 `AISummary.jsx` previously constructed the API URL with a double slash (`${config.API_BASE_URL}/ai/summary` → `http://127.0.0.1:8001/ai/summary`), which returned a 404. The leading `/` was removed to produce the correct single-slash path (`${config.API_BASE_URL}ai/summary`).
