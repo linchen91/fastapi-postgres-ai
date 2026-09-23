@@ -50,7 +50,7 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   ├── namespace.yml      # Namespace: fastapi-postgres
 │   ├── configmap.yml      # Non-sensitive config (POSTGRES_HOST/PORT/DB, OPENROUTER_URL)
 │   ├── secret.yml         # Sensitive config (POSTGRES credentials, SECRET_KEY, API keys)
-│   ├── postgres-deployment.yml  # PostgreSQL 16-alpine deployment with liveness/readiness probes
+│   ├── postgres-deployment.yml  # PostgreSQL 16-alpine deployment (PVC storage, probes)
 │   ├── postgres-service.yml     # ClusterIP service for PostgreSQL
 │   ├── api-deployment.yml       # API deployment with env from ConfigMap/Secret, health probes
 │   └── api-service.yml          # NodePort service for API
@@ -195,7 +195,7 @@ kubectl apply -f k8s/
 - **Namespace** — `fastapi-postgres`
 - **ConfigMap** (`app-config`) — non-sensitive settings (DB host/port/name, LLM base URL)
 - **Secret** (`app-secrets`) — sensitive values (DB credentials, `SECRET_KEY`, API keys)
-- **PostgreSQL** — `postgres:16-alpine` with emptyDir volume, liveness/readiness probes via `pg_isready`
+- **PostgreSQL** — `postgres:16-alpine` with a `PersistentVolumeClaim` (`postgres-data`, 1Gi) so data survives pod recreation, liveness/readiness probes via `pg_isready`
 - **API** — `fastapi-postgres-ai:latest` (`imagePullPolicy: Never`, expects locally built image), liveness/readiness probes on `/docs`
 
 **API service** type is `NodePort` — access via `<node-ip>:<node-port>`. PostgreSQL uses `ClusterIP` (internal only).
@@ -203,6 +203,24 @@ kubectl apply -f k8s/
 > **Note:** The API image must be built and available to the cluster before deploying. Since `imagePullPolicy: Never`, load the image into your cluster's container runtime first (e.g. `minikube image load fastapi-postgres-ai:latest`).
 
 Edit `k8s/secret.yml` before deploying — replace placeholder values with real credentials.
+
+#### Database auto-init & login guarantee
+
+On every startup the API, in the [main.py](main.py) lifespan:
+
+1. Creates any missing tables via `Base.metadata.create_all()` (idempotent — never alters existing tables; matches [models/](models/))
+2. Seeds an `admin` user if no such account exists (**password: `admin123`** — change `ADMIN_PWD_HASH` in `main.py` before real deployments)
+
+Postgres stores its data on a PVC (`postgres-data`), so the database survives pod recreation. As a second layer, if the database is ever wiped or recreated empty, login is **self-healing**: restart the API and schema + admin user are re-created automatically — no manual `psql` steps. Verified end-to-end: emptied database → API restart → `POST /auth/token` returns `200` + JWT with correct credentials, `400` with wrong ones.
+
+> **Important:** env vars sourced from `secretKeyRef` are only read at pod creation. After changing `k8s/secret.yml`, restart the API so it picks up the new values:
+> ```bash
+> kubectl apply -f k8s/secret.yml
+> kubectl rollout restart deploy/api -n fastapi-postgres
+> ```
+> Otherwise the API keeps the old `POSTGRES_PASSWORD` and login fails with `password authentication failed`.
+
+**Progress log (2026-09-23):** "k8s login failed" diagnosed and fixed. Root cause 1: empty database (no tables) → HTTP 500 on `POST /auth/token` (`relation "users" does not exist`) → frontend "Login failed, try again later". Fixed by `create_all` + admin seed in the app lifespan (`k8s/db-init.yml` was introduced as a DB-side alternative, then rolled back as redundant). Root cause 2: API pod held a stale `POSTGRES_PASSWORD` from before the secret was updated → `password authentication failed` after Postgres re-init. Fixed with `kubectl rollout restart deploy/api`. Root cause 3: `emptyDir` storage wiped the DB whenever the Postgres pod was recreated while the API pod kept running → AI Summary and login failed with `relation "users" does not exist`. Fixed by migrating Postgres to a PVC (`postgres-data`). Verified: login `200`, AI Summary `200`, data survives Postgres pod restarts.
 
 ### Terraform Deployment
 
@@ -322,7 +340,7 @@ The backend allows all origins (`*`), methods, and headers for development. Rest
 
 ## Database Schema
 
-The app does **not** run migrations or create tables on startup — `Base.metadata.create_all()` is never called. The PostgreSQL database must already contain the tables defined by the SQLAlchemy models in [models/](models/) before the API can serve requests. Create them manually (e.g. via `psql` or a migration tool of your choice).
+On startup the app creates any missing tables defined by the SQLAlchemy models in [models/](models/) via `Base.metadata.create_all()` and seeds a default `admin` user if none exists — both in the [main.py](main.py) lifespan (see [Database auto-init & login guarantee](#database-auto-init--login-guarantee)). `create_all` only creates missing tables — it never alters existing ones, so it is **not** a migration tool for schema changes.
 
 `psycopg2-binary` remains in requirements only for the standalone [test.py](test.py) script; the API itself uses `asyncpg`.
 
