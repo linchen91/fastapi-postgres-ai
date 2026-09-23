@@ -1,6 +1,6 @@
 from multiprocessing import active_children
 from fastapi import APIRouter, HTTPException
-import os, httpx, datetime
+import os, httpx, datetime, asyncio
 
 router = APIRouter()
 
@@ -42,6 +42,18 @@ def build_messages(stats: dict):
         {"role": "user", "content": user}
     ]
     
+def _openrouter_error_detail(r: httpx.Response) -> str:
+    try:
+        message = r.json().get("error", {}).get("message")
+    except ValueError:
+        message = None
+    if message:
+        return f"OpenRouter API error (HTTP {r.status_code}): {message}"
+    return f"OpenRouter API error (HTTP {r.status_code})."
+
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 3
+
 @router.post("/summary")
 async def ai_summary(payload: dict):
     if not OPENROUTER_API_KEY or not OPENROUTER_URL or not OPENROUTER_MODEL:
@@ -65,12 +77,19 @@ async def ai_summary(payload: dict):
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(f"{OPENROUTER_URL}/chat/completions", headers=headers, json=data)
+        for attempt in range(MAX_ATTEMPTS):
+            r = await client.post(f"{OPENROUTER_URL}/chat/completions", headers=headers, json=data)
 
-        if r.status_code != 200:
-            raise HTTPException(status_code=r.status_code, detail="Error from OpenRouter API.")
+            if r.status_code == 200:
+                j = r.json()
+                content = j["choices"][0]["message"]["content"]
 
-        j = r.json()
-        content = j["choices"][0]["message"]["content"]
+                return {"summary": content}
 
-        return {"summary": content}
+            detail = _openrouter_error_detail(r)
+
+            if r.status_code in RETRYABLE_STATUS and attempt < MAX_ATTEMPTS - 1:
+                await asyncio.sleep(2 ** (attempt + 1))
+                continue
+
+            raise HTTPException(status_code=r.status_code, detail=detail)

@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from api_io_log import ApiIOMiddleware
+from database import engine
 
 STATIC_DIR = Path(__file__).parent / "static"
 API_PATHS = ("/docs", "/redoc", "/openapi.json", "/auth", "/ai")
@@ -44,6 +45,7 @@ class SPAMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     await preload_cache()
     yield
+    await engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
 

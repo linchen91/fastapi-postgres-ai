@@ -100,6 +100,11 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 | `POSTGRES_HOST` | localhost | PostgreSQL host |
 | `POSTGRES_PORT` | 5432 | PostgreSQL port |
 | `POSTGRES_DB` | dzservice | Database name |
+| `DB_POOL_SIZE` | 10 | SQLAlchemy connection pool size per worker |
+| `DB_MAX_OVERFLOW` | 20 | Extra connections allowed beyond `DB_POOL_SIZE` |
+| `DB_POOL_TIMEOUT` | 30 | Seconds to wait for a pooled connection |
+| `DB_POOL_RECYCLE` | 1800 | Seconds before a pooled connection is recycled |
+| `DB_ECHO` | true | Log SQL statements (set `false` in production) |
 | `SECRET_KEY` | - | JWT signing key (required) |
 | `OPENROUTER_API_KEY` | - | OpenRouter API key for AI summaries |
 | `OPENROUTER_MODEL` | - | OpenRouter model identifier, identifier for LangGraph |
@@ -287,6 +292,10 @@ The backend allows all origins (`*`), methods, and headers for development. Rest
 The app does **not** run migrations or create tables on startup — `Base.metadata.create_all()` is never called. The PostgreSQL database must already contain the tables defined by the SQLAlchemy models in [models/](models/) before the API can serve requests. Create them manually (e.g. via `psql` or a migration tool of your choice).
 
 `psycopg2-binary` remains in requirements only for the standalone [test.py](test.py) script; the API itself uses `asyncpg`.
+
+### Connection Pooling
+
+The async engine in [database.py](database.py) uses SQLAlchemy's connection pool (`AsyncAdaptedQueuePool`) configured via the `DB_*` environment variables above. Stale connections are checked with `pool_pre_ping` before use and recycled after `DB_POOL_RECYCLE` seconds. On shutdown, the app lifespan in [main.py](main.py) calls `engine.dispose()` so all pooled connections are closed cleanly (important for Docker/K8s rollouts).
 
 ## SPA Static File Serving
 
@@ -534,6 +543,8 @@ The Home page includes an **AI Summary** button that generates a natural languag
 - **Modal display** — Summary text shown in a modal dialog
 
 Requires `OPENROUTER_API_KEY`, `OPENROUTER_URL`, and `OPENROUTER_MODEL` environment variables.
+
+Transient OpenRouter failures (`429`, `500`, `502`, `503`, `504`) are retried up to 3 times with exponential backoff (2s, 4s). If all attempts fail, the error response includes OpenRouter's actual error message — e.g. upstream rate-limit details for free models such as `poolside/laguna-s-2.1:free`.
 
 ### LangGraph Search Assistant
 
