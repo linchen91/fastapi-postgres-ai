@@ -3,10 +3,9 @@
   hosts: local
   gather_facts: false
   vars:
-    env_template: "{{ playbook_dir }}/../roles/app/templates/env.j2"
-    override_template: "{{ playbook_dir }}/../roles/app/templates/docker-compose.override.yml.j2"
     deploy_playbook: "{{ playbook_dir }}/deploy.yml"
     app_tasks_file: "{{ playbook_dir }}/../roles/app/tasks/main.yml"
+    k8s_tasks_file: "{{ playbook_dir }}/../roles/k8s/tasks/main.yml"
   tasks:
     - name: Load secret placeholder defaults
       ansible.builtin.include_vars:
@@ -24,57 +23,56 @@
         success_msg: "group_vars/all.yml matches the deployment contract"
         fail_msg: "group_vars/all.yml deviates from the expected contract"
 
-    - name: Render env.j2 from placeholder vars
-      ansible.builtin.set_fact:
-        rendered_env: "{{ lookup('ansible.builtin.template', env_template) }}"
-
-    - name: Assert rendered .env carries the compose-interpolated keys
+    - name: Assert vault placeholders cover the Terraform variable contract
       ansible.builtin.assert:
         that:
-          - "'OPENROUTER_API_KEY=sk-or-v1-placeholder' in rendered_env"
-          - "'OPENROUTER_URL=https://openrouter.ai/api/v1' in rendered_env"
-          - "'OPENROUTER_MODEL=openrouter/free' in rendered_env"
-          - "'TAVILY_API_KEY=tvly-placeholder' in rendered_env"
-        success_msg: "env.j2 renders the four compose-interpolated keys"
-        fail_msg: "env.j2 must render OPENROUTER_API_KEY/URL/MODEL and TAVILY_API_KEY from the vault placeholders"
+          - secret_key is defined
+          - postgres_user is defined
+          - postgres_password is defined
+          - postgres_db is defined
+          - openrouter_api_key is defined
+          - openrouter_model is defined
+          - openrouter_url is defined
+          - tavily_api_key is defined
+        success_msg: "vault.yml.example defines every secret Terraform requires"
+        fail_msg: "vault.yml.example must define all TF_VAR_* inputs used by the app role"
 
-    - name: Render docker-compose override from placeholder vars
-      ansible.builtin.set_fact:
-        rendered_override: "{{ lookup('ansible.builtin.template', override_template) }}"
-
-    - name: Assert rendered override replaces the weak hardcoded secrets
-      ansible.builtin.assert:
-        that:
-          - "'SECRET_KEY: \"changeme-jwt-signing-key\"' in rendered_override"
-          - "'POSTGRES_PASSWORD: \"changeme\"' in rendered_override"
-          - "'POSTGRES_DB: \"dzservice\"' in rendered_override"
-          - "'services:' in rendered_override"
-        success_msg: "docker-compose.override.yml.j2 renders the secret overrides"
-        fail_msg: "docker-compose.override.yml.j2 must override SECRET_KEY and the postgres credentials"
-
-    - name: Read deploy playbook and app role tasks
+    - name: Read deploy playbook and role task files
       ansible.builtin.set_fact:
         deploy_content: "{{ lookup('ansible.builtin.file', deploy_playbook) }}"
         app_tasks_content: "{{ lookup('ansible.builtin.file', app_tasks_file) }}"
+        k8s_tasks_content: "{{ lookup('ansible.builtin.file', k8s_tasks_file) }}"
 
     - name: Assert deploy playbook targets the app group and wires both roles
       ansible.builtin.assert:
         that:
           - "'hosts: app' in deploy_content"
-          - "'- docker' in deploy_content"
+          - "'- k8s' in deploy_content"
           - "'- app' in deploy_content"
-        success_msg: "deploy.yml targets hosts: app with roles docker + app"
-        fail_msg: "deploy.yml must target hosts: app and include the docker and app roles"
+          - "'- docker' not in deploy_content"
+        success_msg: "deploy.yml targets hosts: app with roles k8s + app"
+        fail_msg: "deploy.yml must target hosts: app and include the k8s and app roles (not docker)"
 
-    - name: Assert app role builds, configures, and health-checks the stack
+    - name: Assert k8s role verifies kubectl, terraform, and cluster access
       ansible.builtin.assert:
         that:
-          - "'ansible.builtin.uri' in app_tasks_content"
-          - "'docker compose up -d --build' in app_tasks_content"
-          - "'env.j2' in app_tasks_content"
-          - "'docker-compose.override.yml.j2' in app_tasks_content"
-        success_msg: "app role templates config, runs compose up, and health-checks /docs"
-        fail_msg: "roles/app/tasks/main.yml must template .env + override, run docker compose up, and probe via uri"
+          - "'kubectl version --client' in k8s_tasks_content"
+          - "'terraform version' in k8s_tasks_content"
+          - "'kubectl cluster-info' in k8s_tasks_content"
+        success_msg: "k8s role checks kubectl, terraform, and cluster connectivity"
+        fail_msg: "roles/k8s/tasks/main.yml must verify kubectl, terraform, and kubectl cluster-info"
+
+    - name: Assert app role applies Terraform and waits for the rollout
+      ansible.builtin.assert:
+        that:
+          - "'terraform init' in app_tasks_content"
+          - "'terraform apply' in app_tasks_content"
+          - "'TF_VAR_postgres_password' in app_tasks_content"
+          - "'TF_VAR_secret_key' in app_tasks_content"
+          - "'kubectl rollout status' in app_tasks_content"
+          - "'docker compose' not in app_tasks_content"
+        success_msg: "app role runs terraform init/apply with TF_VAR_* and waits for rollout"
+        fail_msg: "roles/app/tasks/main.yml must run terraform apply (no docker compose) and wait for kubectl rollout"
 
     - name: Assert inventory structure
       ansible.builtin.assert:

@@ -1,7 +1,7 @@
 ---
-- name: Deploy FastAPI + PostgreSQL stack with Docker Compose
+- name: Deploy FastAPI + PostgreSQL stack to Kubernetes with Terraform
   hosts: app
-  # Security: only escalate on remote hosts; local connection uses invoking user's docker access.
+  # Security: only escalate on remote hosts; local connection uses invoking user's access.
   become: "{{ ansible_connection != 'local' }}"
   vars_files:
     - ../vars/vault.yml.example
@@ -16,5 +16,5 @@
         file: "{{ playbook_dir }}/../vars/vault.yml"
       when: vault_override.stat.exists
   roles:
-    - docker
+    - k8s
     - app

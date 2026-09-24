@@ -1,4 +1,13 @@
 ---
+app_terraform_dir: "{{ app_root }}/terraform"
+app_terraform_init_timeout: 120
+app_terraform_apply_timeout: 300
+app_k8s_namespace: fastapi-postgres
+app_api_replicas: 1
+app_api_image: fastapi-postgres-ai:latest
+app_api_image_pull_policy: "Never"
+app_rollout_timeout: 180s
+app_health_check: false
 app_health_url: "http://localhost:{{ api_port }}/docs"
 app_health_retries: 30
 app_health_delay: 5

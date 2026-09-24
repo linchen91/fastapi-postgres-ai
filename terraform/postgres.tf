@@ -93,8 +93,27 @@ resource "kubernetes_deployment" "postgres" {
         volume {
           name = "postgres-data"
 
-          empty_dir {}
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.postgres.metadata[0].name
+          }
         }
+      }
+    }
+  }
+}
+
+resource "kubernetes_persistent_volume_claim" "postgres" {
+  metadata {
+    name      = "postgres-data"
+    namespace = kubernetes_namespace.app.metadata[0].name
+  }
+
+  spec {
+    access_modes = ["ReadWriteOnce"]
+
+    resources {
+      requests = {
+        storage = "1Gi"
       }
     }
   }

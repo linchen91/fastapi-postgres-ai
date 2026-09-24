@@ -1,0 +1,2 @@
+---
+k8s_kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') | default(ansible_env.HOME ~ '/.kube/config', true) }}"
