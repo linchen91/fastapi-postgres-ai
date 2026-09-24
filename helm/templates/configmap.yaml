@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configMap.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fastapi-postgres-ai.labels" . | nindent 4 }}
+data:
+  POSTGRES_HOST: {{ .Values.configMap.postgresHost | quote }}
+  POSTGRES_PORT: {{ .Values.configMap.postgresPort | quote }}
+  POSTGRES_DB: {{ .Values.configMap.postgresDb | quote }}
+  OPENROUTER_URL: {{ .Values.configMap.openrouterUrl | quote }}

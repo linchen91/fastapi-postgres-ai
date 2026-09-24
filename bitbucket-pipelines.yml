@@ -21,6 +21,12 @@ pipelines:
           - chmod +x scripts/test-terraform.sh
           - ./scripts/test-terraform.sh
     - step:
+        name: Helm chart lint & template
+        image: alpine/helm:3.16.4
+        script:
+          - chmod +x scripts/test-helm.sh
+          - ./scripts/test-helm.sh
+    - step:
         name: Ansible lint, syntax-check & tests
         image: python:3.12-slim
         script:

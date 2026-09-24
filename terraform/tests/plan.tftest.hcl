@@ -1,4 +1,6 @@
 # Offline plan assertions: no cluster required (dummy kubeconfig supplied by scripts/test-terraform.sh).
+# The stack is deployed as one Helm release; assertions decode the values
+# passed to helm_release.app (secrets marked sensitive -> nonsensitive()).
 
 run "plan_offline" {
   command = plan
@@ -30,83 +32,75 @@ run "plan_offline" {
   }
 
   assert {
-    condition     = kubernetes_config_map.app.data["POSTGRES_DB"] == "dzservice"
-    error_message = "configmap POSTGRES_DB must be dzservice"
+    condition     = helm_release.app.name == "fastapi-postgres-ai"
+    error_message = "helm release name must be fastapi-postgres-ai"
   }
 
   assert {
-    condition     = kubernetes_config_map.app.data["POSTGRES_HOST"] == "postgres"
-    error_message = "configmap POSTGRES_HOST must be postgres"
+    condition     = helm_release.app.namespace == "fastapi-postgres"
+    error_message = "helm release must target namespace fastapi-postgres"
+  }
+
+  assert {
+    condition     = endswith(helm_release.app.chart, "/helm")
+    error_message = "helm release must use the in-repo chart at ../helm, got: ${helm_release.app.chart}"
+  }
+
+  assert {
+    condition     = helm_release.app.take_ownership == true
+    error_message = "helm release must adopt pre-existing objects (take_ownership)"
+  }
+
+  assert {
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).configMap.postgresDb == "dzservice"
+    error_message = "configMap.postgresDb must be dzservice"
+  }
+
+  assert {
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).configMap.postgresHost == "postgres"
+    error_message = "configMap.postgresHost must be postgres"
   }
 
   assert {
     condition = alltrue([
-      contains(keys(kubernetes_secret.app.data), "POSTGRES_USER"),
-      contains(keys(kubernetes_secret.app.data), "POSTGRES_PASSWORD"),
-      contains(keys(kubernetes_secret.app.data), "SECRET_KEY"),
-      contains(keys(kubernetes_secret.app.data), "OPENROUTER_API_KEY"),
-      contains(keys(kubernetes_secret.app.data), "OPENROUTER_URL"),
-      contains(keys(kubernetes_secret.app.data), "OPENROUTER_MODEL"),
-      contains(keys(kubernetes_secret.app.data), "TAVILY_API_KEY"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "postgresUser"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "postgresPassword"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "secretKey"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "openrouterApiKey"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "openrouterUrl"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "openrouterModel"),
+      contains(keys(yamldecode(nonsensitive(helm_release.app.values[0])).secret), "tavilyApiKey"),
     ])
-    error_message = "secret must contain all expected keys"
+    error_message = "secret values must contain all expected keys"
   }
 
   assert {
-    condition     = kubernetes_deployment.postgres.spec[0].template[0].spec[0].container[0].image == "postgres:16-alpine"
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).secret.postgresPassword == "test-password"
+    error_message = "secret.postgresPassword must pass through the postgres_password variable"
+  }
+
+  assert {
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).postgres.image == "postgres:16-alpine"
     error_message = "postgres image must be postgres:16-alpine"
   }
 
   assert {
-    condition     = join(" ", kubernetes_deployment.postgres.spec[0].template[0].spec[0].container[0].readiness_probe[0].exec[0].command) == "pg_isready -U postgres"
-    error_message = "postgres readiness probe must exec pg_isready, got: ${join(" ", kubernetes_deployment.postgres.spec[0].template[0].spec[0].container[0].readiness_probe[0].exec[0].command)}"
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).postgres.persistence.size == "1Gi"
+    error_message = "postgres persistence size must be 1Gi"
   }
 
   assert {
-    condition     = join(" ", kubernetes_deployment.postgres.spec[0].template[0].spec[0].container[0].liveness_probe[0].exec[0].command) == "pg_isready -U postgres"
-    error_message = "postgres liveness probe must exec pg_isready, got: ${join(" ", kubernetes_deployment.postgres.spec[0].template[0].spec[0].container[0].liveness_probe[0].exec[0].command)}"
-  }
-
-  assert {
-    condition     = kubernetes_service.postgres.spec[0].type == "ClusterIP"
-    error_message = "postgres service must be ClusterIP"
-  }
-
-  assert {
-    condition     = kubernetes_deployment.api.spec[0].template[0].spec[0].container[0].image == "fastapi-postgres-ai:latest"
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).api.image == "fastapi-postgres-ai:latest"
     error_message = "api image must be fastapi-postgres-ai:latest"
   }
 
   assert {
-    condition     = kubernetes_deployment.api.spec[0].template[0].spec[0].container[0].image_pull_policy == "Never"
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).api.imagePullPolicy == "Never"
     error_message = "api imagePullPolicy must be Never"
   }
 
   assert {
-    condition     = kubernetes_deployment.api.spec[0].template[0].spec[0].container[0].readiness_probe[0].http_get[0].path == "/docs"
-    error_message = "api readiness probe must hit /docs"
-  }
-
-  assert {
-    condition     = kubernetes_deployment.api.spec[0].template[0].spec[0].container[0].liveness_probe[0].http_get[0].path == "/docs"
-    error_message = "api liveness probe must hit /docs"
-  }
-
-  assert {
-    condition = alltrue([
-      for env in kubernetes_deployment.api.spec[0].template[0].spec[0].container[0].env : true
-      if contains(["POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "SECRET_KEY", "OPENROUTER_API_KEY", "OPENROUTER_URL", "OPENROUTER_MODEL", "TAVILY_API_KEY"], env.name)
-    ]) && length(kubernetes_deployment.api.spec[0].template[0].spec[0].container[0].env) == 10
-    error_message = "api must declare exactly the 10 expected env vars"
-  }
-
-  assert {
-    condition     = kubernetes_service.api.spec[0].type == "NodePort"
-    error_message = "api service must be NodePort"
-  }
-
-  assert {
-    condition     = kubernetes_service.api.spec[0].port[0].port == 8001 && tostring(kubernetes_service.api.spec[0].port[0].target_port) == "8001"
-    error_message = "api service port and targetPort must be 8001"
+    condition     = yamldecode(nonsensitive(helm_release.app.values[0])).api.service.nodePort == null
+    error_message = "api service nodePort must be null (Kubernetes assigns)"
   }
 }

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    # Keep database data on `helm uninstall` / `terraform destroy`.
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "fastapi-postgres-ai.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size }}

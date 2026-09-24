@@ -1,0 +1,6 @@
+apiVersion: v2
+name: fastapi-postgres-ai
+description: FastAPI + PostgreSQL + AI application stack (API, PostgreSQL, config and secret)
+type: application
+version: 0.1.0
+appVersion: "latest"
