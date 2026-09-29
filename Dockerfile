@@ -30,4 +30,6 @@ RUN mkdir -p logs
 
 EXPOSE 8001
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+# --proxy-headers: honour X-Forwarded-Proto from the platform's TLS terminator,
+# otherwise scheme-relative URLs (e.g. slash redirects) come out as http://
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--proxy-headers", "--forwarded-allow-ips=*"]
