@@ -39,6 +39,14 @@ test.describe('Azure deployment (live, no mocks)', () => {
     expect(await page.evaluate(() => localStorage.account)).toBe(ADMIN_ACCOUNT);
   });
 
+  test('serves Swagger UI at /docs instead of the SPA shell', async ({ page }) => {
+    await page.goto('/docs');
+
+    await expect(page.locator('.swagger-ui .info .title')).toBeVisible();
+    expect(await page.locator('.opblock').count()).toBeGreaterThan(0);
+    await expect(page.locator('#root')).toHaveCount(0);
+  });
+
   test('news page loads traffic messages without a network error', async ({ page }) => {
     await login(page, ADMIN_ACCOUNT, ADMIN_PASSWORD);
     await expect(page).toHaveURL(/\/home$/);
