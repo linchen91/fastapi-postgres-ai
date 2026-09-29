@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:azure": "playwright test -c playwright.azure.config.js"
   },
   "dependencies": {
     "axios": "^1.19.0",
