@@ -88,6 +88,9 @@ async def preload_cache():
         logger.warning('Traffic cache pre-warm failed — first request will fetch live', exc_info=True)
 
 
+# Both paths are registered on purpose: '/news' would otherwise 307-redirect
+# to http:// behind a TLS terminator, which browsers block as mixed content.
+@router.get('')
 @router.get('/')
 async def get_traffic(force: bool = Query(default=False)):
     if not force and 'data' in CACHE:
