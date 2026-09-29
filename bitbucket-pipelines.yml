@@ -2,12 +2,8 @@ image: hashicorp/terraform:1.9.5
 
 definitions:
   caches:
-    terraform:
-      paths:
-        - terraform/.terraform
-    npm:
-      paths:
-        - ~/.npm
+    terraform: terraform/.terraform
+    npm: ~/.npm
 
 pipelines:
   default:

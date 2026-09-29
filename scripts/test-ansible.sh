@@ -7,6 +7,12 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
+# Bitbucket Pipelines checks out into a world-writable directory, which makes
+# ansible ignore ansible.cfg found via the cwd search (dropping roles_path ->
+# "role 'k8s' was not found"). Pinning ANSIBLE_CONFIG keeps CI and local runs
+# on the same config regardless of directory permissions.
+export ANSIBLE_CONFIG="${ANSIBLE_CONFIG:-$ROOT/ansible/ansible.cfg}"
+
 if ! command -v ansible-playbook >/dev/null 2>&1; then
     echo "ERROR: ansible-playbook not found. Install with: pip install ansible-core" >&2
     exit 1
