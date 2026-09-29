@@ -7,7 +7,7 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 ## Project Structure
 
 ```
-├── main.py                # App entry point, CORS config, router registration
+├── main.py                # App entry point, CORS, router registration, SPA static middleware
 ├── database.py            # Async DB engine & session factory (asyncpg)
 ├── llmbase.py             # Shared LLM (OpenRouter) and Tavily client singletons
 ├── api_io_log.py          # Request/response logging middleware
@@ -455,18 +455,22 @@ Two suites hit the live site. Both run on demand only — neither is wired into
 subscription is paused once its credit runs out, so a live check must not gate pull requests.
 
 ```bash
-./scripts/test-azure.sh              # HTTP smoke: SPA, assets, config, /docs, /news, auth
-cd frontend && npm run test:azure    # browser: login, bad credentials, dashboard, news page
+./scripts/test-azure.sh              # HTTP smoke: SPA, assets, config, /docs + /redoc, /news, auth
+cd frontend && npm run test:azure    # browser: login, bad credentials, dashboard, /docs Swagger, news page
 ```
 
-[scripts/test-azure.sh](scripts/test-azure.sh) retries the first request (cold start) then asserts the
-regressions listed below: `/news` serves without redirecting, `openapi.json` is not `null`, redirects
-stay on `https://`, and an authenticated admin can read `/users/`. Override target or credentials with
-`AZURE_BASE_URL`, `AZURE_ADMIN_ACCOUNT`, `AZURE_ADMIN_PASSWORD`.
+[scripts/test-azure.sh](scripts/test-azure.sh) retries the first request (cold start) then asserts **22
+checks**, including every regression listed below: the SPA and its bundle load, `/docs` and `/redoc` serve
+real Swagger/ReDoc (sent with a **browser `Accept: text/html` header** — with curl's default `*/*` you get
+Swagger UI even when a browser gets a blank page), `/news` serves without redirecting, `openapi.json` is
+not `null`, redirects stay on `https://`, and an authenticated admin can read `/users/`. Override target or
+credentials with `AZURE_BASE_URL`, `AZURE_ADMIN_ACCOUNT`, `AZURE_ADMIN_PASSWORD`.
 
-`npm run test:azure` runs [frontend/tests/azure-live.spec.js](frontend/tests/azure-live.spec.js) under
-[frontend/playwright.azure.config.js](frontend/playwright.azure.config.js) — no `webServer`, no
-`page.route` mocks, real API. The default `npm run test:e2e` ignores that spec, so CI stays offline.
+`npm run test:azure` runs [frontend/tests/azure-live.spec.js](frontend/tests/azure-live.spec.js) — **6
+tests, no `page.route` mocks**, real API: login form, bad credentials, admin login, `/docs` rendering
+Swagger instead of the SPA shell, the news page, and the dashboard — under
+[frontend/playwright.azure.config.js](frontend/playwright.azure.config.js) (no `webServer`, longer timeouts
+for cold starts). The default `npm run test:e2e` ignores that spec, so CI stays offline.
 
 ### Teardown
 
@@ -487,6 +491,12 @@ az group delete -n rg-fastapi-postgres-ai --yes --no-wait   # removes everything
 3. **Return the cached OpenAPI schema.** `custom_openapi()` in [main.py](main.py) must
    `return openapi_schema` after caching it, otherwise the first request after every cold start
    responds `null` and Swagger UI loads empty.
+4. **Keep `/docs` out of the SPA fallback.** `SPAMiddleware` in [main.py](main.py) serves `index.html` for
+   any GET whose `Accept` contains `text/html` — exactly what a browser sends when navigating to `/docs`.
+   Doc routes (`/docs`, `/redoc`, `/openapi.json`) therefore return early to FastAPI. Without that the
+   request answers `200` with the SPA shell, React Router matches no route, and the page is blank. A plain
+   `curl` sends `Accept: */*` and gets real Swagger UI, so only a browser-style Accept header — or
+   `./scripts/test-azure.sh` — exposes the problem.
 
 ## Unit Tests
 
@@ -513,10 +523,12 @@ npm run test:e2e
 [frontend/playwright.config.js](frontend/playwright.config.js) starts the Vite dev server automatically (`webServer`) on `http://127.0.0.1:5173` — no manual `npm run dev` required. [frontend/vite.config.js](frontend/vite.config.js) binds `127.0.0.1` explicitly so Playwright's probe can reach the dev server (Vite's default `localhost` may bind only `[::1]` on some systems).
 
 **Live Azure suite:** [frontend/tests/azure-live.spec.js](frontend/tests/azure-live.spec.js) runs the same
-flows against the deployed Container App with **no mocks** (real login, real JWT, real `/news`). It uses a
-separate config, [frontend/playwright.azure.config.js](frontend/playwright.azure.config.js) — no `webServer`,
-bigger timeouts for cold starts — and is started with `npm run test:azure`. The default config sets
-`testIgnore` on that file, so `npm run test:e2e` (and CI) never touches Azure. See
+flows against the deployed Container App with **no mocks** (real login, real JWT, real `/news`, real
+`/docs`) — 6 tests covering form render, rejected credentials, admin login, Swagger UI rendering, the news
+page and the dashboard. It uses a separate config,
+[frontend/playwright.azure.config.js](frontend/playwright.azure.config.js) — no `webServer`, bigger timeouts
+for cold starts — and is started with `npm run test:azure`. The default config sets `testIgnore` on that
+file, so `npm run test:e2e` (and CI) never touches Azure. See
 [Verify the deployment](#verify-the-deployment).
 
 **CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `npm ci && npm run test:e2e` in `mcr.microsoft.com/playwright:v1.63.0-noble`. The image version must match `@playwright/test` in [frontend/package.json](frontend/package.json) — bump both together or Chromium lookups fail. On failure, `frontend/test-results/` and `frontend/playwright-report/` are uploaded as build artifacts (both gitignored).
@@ -537,11 +549,22 @@ The async engine in [database.py](database.py) uses SQLAlchemy's connection pool
 
 ## SPA Static File Serving
 
-When a `static/` directory exists (built frontend), the app serves it as a single-page application:
+When a `static/` directory exists (built frontend), `SPAMiddleware` in [main.py](main.py) serves it as a
+single-page application, in this order:
 
-- `/assets/*` — served as static files
-- All other routes — serve `index.html` (React Router handles client-side routing)
-- API routes (`/docs`, `/redoc`, `/openapi`, `/auth/*`, `/users/*`, etc.) are not affected
+| Condition | Response |
+|-----------|----------|
+| Path is `/docs`, `/redoc` or `/openapi.json` | Passed straight to FastAPI (never the SPA shell) |
+| Path resolves to a file under `static/` (`/assets/*`, `/config.json`, `/index.html`, …) | That file |
+| `GET` whose `Accept` contains `text/html` | `index.html`, so React Router handles refresh/deep links |
+| Anything else (Axios calls use `Accept: application/json`) | Passed to the router unchanged |
+
+The `text/html` condition is what a browser sends when it navigates, which is why a refresh of
+`/ai/search` — an SPA path sharing the `/ai` API prefix — gets the SPA instead of a `405`. It is also why
+the doc routes need their early return: without it, opening `/docs` returns `index.html` with **HTTP 200**,
+React Router matches no route, and the page stays blank while a plain `curl` (default `Accept: */*`) still
+sees real Swagger UI. See pitfall 4 in
+[Azure-specific pitfalls](#azure-specific-pitfalls-already-fixed--dont-regress-these).
 
 To build and serve the frontend:
 

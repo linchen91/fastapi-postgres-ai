@@ -113,14 +113,19 @@ Run on demand after any deploy — both suites hit the live URL, both are intent
 credit runs out, so a live check must not block a push).
 
 ```bash
-./scripts/test-azure.sh              # HTTP smoke — 20 assertions
-cd frontend && npm run test:azure    # browser e2e — 5 tests, no mocks
+./scripts/test-azure.sh              # HTTP smoke — 22 assertions
+cd frontend && npm run test:azure    # browser e2e — 6 tests, no mocks
 ```
 
 `test-azure.sh` waits out a cold start (10 attempts × 6 s by default), then checks the SPA, its bundle,
-`config.json`, `/docs`, `openapi.json`, `/news` (with and without a trailing slash, and with
+`config.json`, `/docs`, `redoc`, `openapi.json`, `/news` (with and without a trailing slash, and with
 `?force=true`), an https redirect, a `401` on `/events`, a real admin login, and an authenticated read of
 `/users/`. Each assertion targets one of the regressions in [Fixed](#fixed).
+
+Page-like checks are sent with a **browser `Accept: text/html,…` header**. That matters: the SPA middleware
+serves `index.html` for any GET accepting `text/html`, so probing `/docs` with curl's default `Accept: */*`
+gets real Swagger UI even when a browser gets a blank page. Both the shell check and the
+`swagger-ui-bundle` content check are needed to catch that.
 
 `npm run test:azure` uses `frontend/playwright.azure.config.js` (no `webServer`, 90 s timeout) and logs in
 for real, so `/home` and `/news` are actually rendered against production data.
@@ -183,5 +188,10 @@ az acr delete -n $ACR_NAME --yes
   `--proxy-headers --forwarded-allow-ips=*` so `X-Forwarded-Proto` from Container Apps makes
   redirects absolute over `https://` (`/users`, `/devices`, `/roles` still redirect — to the right
   scheme now — because the frontend calls them with a trailing slash).
+- **`/docs` rendered a blank page in a browser** (HTTP 200, no Swagger UI). `SPAMiddleware` in
+  [main.py](main.py) fell back to `index.html` for *every* GET whose `Accept` contained `text/html` —
+  `/docs` included — so the browser got the SPA shell, React Router matched no route, and the page stayed
+  empty. `curl` with its default `Accept: */*` got real Swagger UI, which is why it went unnoticed.
+  Doc routes (`/docs`, `/redoc`, `/openapi.json`) now return early to FastAPI before the fallback.
 - **Two orphaned Log Analytics workspaces** left by interrupted environment creates were deleted;
   `workspace-rgfastapipostgresaiznNg` is the one `cae-fastapi-ai` is wired to.
