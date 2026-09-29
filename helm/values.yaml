@@ -1,0 +1,41 @@
+# Default values for the fastapi-postgres-ai chart.
+# Terraform overrides these via `helm_release.app.values` (see terraform/helm.tf);
+# every secret below is empty by default and MUST be provided at install time.
+
+# Non-sensitive configuration (ConfigMap: app-config).
+configMap:
+  name: app-config
+  postgresHost: postgres
+  postgresPort: "5432"
+  postgresDb: dzservice
+  openrouterUrl: https://openrouter.ai/api/v1
+
+# Sensitive configuration (Secret: app-secrets).
+secret:
+  name: app-secrets
+  postgresUser: postgres
+  postgresPassword: ""
+  secretKey: ""
+  openrouterApiKey: ""
+  openrouterModel: openrouter/free
+  openrouterUrl: https://openrouter.ai/api/v1
+  tavilyApiKey: ""
+
+postgres:
+  image: postgres:16-alpine
+  replicas: 1
+  service:
+    port: 5432
+  persistence:
+    # PVC name is fixed to `postgres-data` (matches the pre-Helm cluster state).
+    size: 1Gi
+
+api:
+  image: fastapi-postgres-ai:latest
+  imagePullPolicy: Never
+  replicas: 1
+  port: 8001
+  service:
+    type: NodePort
+    # null = let Kubernetes assign (or keep the existing port when adopting).
+    nodePort: null

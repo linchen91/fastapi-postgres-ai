@@ -1,0 +1,12 @@
+FastAPI + PostgreSQL + AI released as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+API service ({{ .Values.api.service.type }}):
+  kubectl --namespace {{ .Release.Namespace }} get svc api
+  port-forward:  kubectl --namespace {{ .Release.Namespace }} port-forward svc/api {{ .Values.api.port }}:{{ .Values.api.port }}  ->  http://127.0.0.1:{{ .Values.api.port }}/docs
+
+PostgreSQL (ClusterIP, internal only):
+  kubectl --namespace {{ .Release.Namespace }} get svc postgres
+
+Warning: PostgreSQL only applies POSTGRES_PASSWORD on first init of its data
+directory. Keep terraform/terraform.tfvars (or your values) in sync with the
+live Secret before upgrading, or the API will fail to authenticate.

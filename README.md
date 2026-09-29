@@ -54,15 +54,18 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   ├── postgres-service.yml     # ClusterIP service for PostgreSQL
 │   ├── api-deployment.yml       # API deployment with env from ConfigMap/Secret, health probes
 │   └── api-service.yml          # NodePort service for API
-├── terraform/             # Terraform config (Kubernetes provider, mirrors k8s/)
+├── helm/                  # Helm chart deployed by Terraform (mirrors k8s/)
+│   ├── Chart.yaml         # Chart metadata (fastapi-postgres-ai)
+│   ├── values.yaml        # Chart defaults (secrets empty; Terraform overrides)
+│   └── templates/         # ConfigMap, Secret, PostgreSQL + PVC, API Deployments/Services
+├── terraform/             # Terraform config (Kubernetes + Helm providers)
 │   ├── versions.tf        # Terraform + provider version constraints
-│   ├── providers.tf       # Kubernetes provider (kubeconfig via config_path)
+│   ├── providers.tf       # Kubernetes + Helm providers (kubeconfig via config_path)
 │   ├── variables.tf       # All tunables (namespace, DB, secrets, images, ports)
 │   ├── namespace.tf       # Namespace resource
-│   ├── config.tf          # ConfigMap + Secret
-│   ├── postgres.tf        # PostgreSQL Deployment + PVC (postgres-data) + ClusterIP Service
-│   ├── api.tf             # API Deployment + NodePort Service
-│   ├── outputs.tf         # namespace / service names / node port
+│   ├── helm.tf            # helm_release deploying ../helm (values from variables)
+│   ├── migration.tf       # ONE-TIME removed blocks (helm adoption) — delete after first apply
+│   ├── outputs.tf         # namespace / release name / service names / node port
 │   ├── terraform.tfvars.example  # Placeholder values (copy to terraform.tfvars)
 │   └── tests/plan.tftest.hcl     # Offline plan assertions (terraform test)
 ├── ansible/               # Ansible deployment (Kubernetes via Terraform)
@@ -79,12 +82,13 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │       └── app/           # terraform init/apply (TF_VAR_* from vault), rollout status
 ├── scripts/
 │   ├── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
+│   ├── test-helm.sh       # helm lint + template entrypoint (local & CI)
 │   └── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
 ├── tests/                 # pytest unit tests (offline)
 │   ├── conftest.py        # sys.path bootstrap for test imports
 │   ├── test_ai_summary.py # OpenRouter retry/backoff + error detail tests
 │   └── test_database_pool.py  # connection pool config tests
-├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (terraform, ansible & Playwright e2e tests)
+├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (terraform, helm, ansible & Playwright e2e tests)
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
@@ -174,7 +178,7 @@ docker compose up --build
 
 ### Kubernetes
 
-Deploy to a Kubernetes cluster using the manifests in `k8s/`. **If you already manage this cluster with Terraform, do not also `kubectl apply` these files** — pick one manager (Terraform is the supported path; the raw YAML is an alternative for clusters without Terraform):
+Deploy to a Kubernetes cluster using the manifests in `k8s/`. **If you already manage this cluster with Terraform, do not also `kubectl apply` these files** — pick one manager (Terraform is the supported path and deploys the same resources from the [helm/](helm/) chart — see [Terraform Deployment](#terraform-deployment); the raw YAML is an alternative for clusters without Terraform):
 
 ```bash
 # Create namespace and apply all resources
@@ -219,7 +223,7 @@ On every startup the API, in the [main.py](main.py) lifespan:
 1. Creates any missing tables via `Base.metadata.create_all()` (idempotent — never alters existing tables; matches [models/](models/))
 2. Seeds an `admin` user if no such account exists (**password: `admin123`** — change `ADMIN_PWD_HASH` in `main.py` before real deployments)
 
-Postgres stores its data on a PVC (`postgres-data`), so the database survives pod recreation. As a second layer, if the database is ever wiped or recreated empty, login is **self-healing**: restart the API and schema + admin user are re-created automatically — no manual `psql` steps. Verified end-to-end: emptied database → API restart → `POST /auth/token` returns `200` + JWT with correct credentials, `400` with wrong ones.
+Postgres stores its data on a PVC (`postgres-data`), so the database survives pod recreation. As a second layer, if the database is ever wiped or recreated empty, login is **self-healing**: restart the API and schema + admin user are re-created automatically — no manual `psql` steps.
 
 > **Important:** env vars sourced from `secretKeyRef` are only read at pod creation. After changing `k8s/secret.yml`, restart the API so it picks up the new values:
 > ```bash
@@ -228,13 +232,9 @@ Postgres stores its data on a PVC (`postgres-data`), so the database survives po
 > ```
 > Otherwise the API keeps the old `POSTGRES_PASSWORD` and login fails with `password authentication failed`.
 
-**Progress log (2026-09-23):** "k8s login failed" diagnosed and fixed. Root cause 1: empty database (no tables) → HTTP 500 on `POST /auth/token` (`relation "users" does not exist`) → frontend "Login failed, try again later". Fixed by `create_all` + admin seed in the app lifespan (`k8s/db-init.yml` was introduced as a DB-side alternative, then rolled back as redundant). Root cause 2: API pod held a stale `POSTGRES_PASSWORD` from before the secret was updated → `password authentication failed` after Postgres re-init. Fixed with `kubectl rollout restart deploy/api`. Root cause 3: `emptyDir` storage wiped the DB whenever the Postgres pod was recreated while the API pod kept running → AI Summary and login failed with `relation "users" does not exist`. Fixed by migrating Postgres to a PVC (`postgres-data`). Verified: login `200`, AI Summary `200`, data survives Postgres pod restarts.
-
-**Progress log (2026-09-24):** Runtime switched so **Terraform is the sole owner** of the cluster; Ansible now wraps `terraform apply` (no Compose in the deploy path). Incidents fixed the same day: (1) host port `8001` conflicts when Compose and a `kubectl port-forward` to the API service ran at the same time — only one may bind `8001`; (2) `terraform.tfstate` lost its `resources` array (outputs remained) while objects still existed in the cluster → `namespaces "fastapi-postgres" already exists` on apply; recovered with `terraform import` for every resource; (3) `postgres.tf` still declared `emptyDir` while the live cluster ran the PVC from `k8s/postgres-deployment.yml` — applying would have wiped the DB; config now manages `kubernetes_persistent_volume_claim.postgres`; (4) `terraform.tfvars` `postgres_password` / `tavily_api_key` disagreed with the live Secret — Postgres data dirs only honor the password **at first init**, so tfvars was synced to live values before apply. Verified: `terraform plan` → no changes, login `200`.
-
 ### Terraform Deployment
 
-[terraform/](terraform/) manages the same resources as the raw YAML in `k8s/`, using the Kubernetes provider (namespace, ConfigMap, Secret, API + Postgres Deployments/Services, and the Postgres PVC). The raw manifests remain an alternative for clusters you do not manage with Terraform.
+[terraform/](terraform/) deploys the application as a single Helm release (`helm_release.app`, release name `fastapi-postgres-ai`) rendered from the in-repo chart [helm/](helm/) via the Helm provider. Only the namespace stays a plain Kubernetes resource ([terraform/namespace.tf](terraform/namespace.tf)). The chart produces the same objects as the raw YAML in `k8s/` (ConfigMap, Secret, API + Postgres Deployments/Services, Postgres PVC); the raw manifests remain an alternative for clusters you do not manage with Terraform.
 
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
@@ -245,23 +245,31 @@ terraform -chdir=terraform plan
 terraform -chdir=terraform apply
 ```
 
-**Prerequisites:** a reachable Kubernetes cluster and a valid kubeconfig (`config_path`, default `~/.kube/config`). Build/load the API image first (`minikube image load fastapi-postgres-ai:latest`) — `api_image_pull_policy` defaults to `Never`, matching `k8s/`.
+**Prerequisites:** a reachable Kubernetes cluster and a valid kubeconfig (`config_path`, default `~/.kube/config`). Build/load the API image first (`minikube image load fastapi-postgres-ai:latest`) — `api_image_pull_policy` defaults to `Never`, matching `k8s/`. The `helm` CLI is **not** required to deploy (the provider embeds Helm); it is only needed for `./scripts/test-helm.sh`.
 
-Key variables (see [terraform/variables.tf](terraform/variables.tf)): `namespace`, `postgres_*`, `secret_key`, `openrouter_api_key`, `openrouter_model`, `tavily_api_key`, `api_image`, `api_replicas`, `api_node_port`. State is local (`terraform/terraform.tfstate`, gitignored).
+Key variables (see [terraform/variables.tf](terraform/variables.tf)): `namespace`, `postgres_*`, `secret_key`, `openrouter_api_key`, `openrouter_model`, `tavily_api_key`, `api_image`, `api_replicas`, `api_node_port`. They are passed to the chart as Helm values by [terraform/helm.tf](terraform/helm.tf). State is local (`terraform/terraform.tfstate`, gitignored).
 
-**Secrets must match the live cluster.** Postgres only applies `POSTGRES_PASSWORD` when it first initializes a data directory — changing the Secret later does not update the existing DB, and a restarted API pod will then authenticate with the wrong password. If `terraform plan` shows a Secret data change you did not intend, either sync `terraform.tfvars` to the live values or plan a deliberate password rotation (re-init the PVC / alter the role).
+**Migrating an existing (pre-Helm) cluster — one-time:** the first `apply` after this change does *not* destroy anything:
+
+1. **Sync `terraform/terraform.tfvars` to the live Secret first** — Helm overwrites the Secret's data with the chart values, so a stale `postgres_password` would break API login after the pods restart (see the Secret warning below).
+2. `terraform plan` must show **`1 to add, 0 to change, 0 to destroy`**, plus the warning *"Some objects will no longer be managed by Terraform ... will not delete them"* for the 7 old objects. If it shows any `destroy`, stop — do not apply.
+3. `terraform apply` — `terraform/migration.tf` makes Terraform *forget* the old `kubernetes_*` objects (`removed` blocks with `destroy = false`) while `helm_release.app` adopts them in-cluster (`take_ownership = true`). Pod templates and selectors are identical to what is deployed, so **no pods restart** and the NodePort/PVC (data) are preserved.
+4. Delete [terraform/migration.tf](terraform/migration.tf) — it is a one-time file.
+5. Optionally set `take_ownership = false` in [terraform/helm.tf](terraform/helm.tf) once adoption succeeded.
+
+**Secrets must match the live cluster.** Postgres only applies `POSTGRES_PASSWORD` when it first initializes a data directory — changing the Secret later does not update the existing DB, and a restarted API pod will then authenticate with the wrong password. If `terraform plan` shows a change to `helm_release.app.values` you did not intend, either sync `terraform.tfvars` to the live values or plan a deliberate password rotation (re-init the PVC / alter the role).
+
+A Secret change alone does not restart pods (env vars from `secretKeyRef` are read at pod creation), so after applying new secret values restart the API explicitly:
+
+```bash
+kubectl rollout restart deploy/api -n fastapi-postgres
+```
 
 **State recovery:** if apply fails with `... already exists` while `terraform state list` is empty, objects are in the cluster but missing from state — re-import them rather than destroying:
 
 ```bash
 terraform -chdir=terraform import kubernetes_namespace.app fastapi-postgres
-terraform -chdir=terraform import kubernetes_config_map.app fastapi-postgres/app-config
-terraform -chdir=terraform import kubernetes_secret.app fastapi-postgres/app-secrets
-terraform -chdir=terraform import kubernetes_service.api fastapi-postgres/api
-terraform -chdir=terraform import kubernetes_service.postgres fastapi-postgres/postgres
-terraform -chdir=terraform import kubernetes_deployment.api fastapi-postgres/api
-terraform -chdir=terraform import kubernetes_deployment.postgres fastapi-postgres/postgres
-terraform -chdir=terraform import kubernetes_persistent_volume_claim.postgres fastapi-postgres/postgres-data
+terraform -chdir=terraform import helm_release.app fastapi-postgres/fastapi-postgres-ai
 ```
 
 ### Terraform Tests
@@ -273,6 +281,16 @@ terraform -chdir=terraform import kubernetes_persistent_volume_claim.postgres fa
 Runs `terraform fmt -check`, `init -backend=false`, `validate`, and native `terraform test` plan assertions ([terraform/tests/plan.tftest.hcl](terraform/tests/plan.tftest.hcl)). Tests are fully offline — a dummy kubeconfig is generated automatically; **no cluster, credentials, or real secrets are required**.
 
 **CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs the same script in `hashicorp/terraform:1.9.5` on every push to this repository (Bitbucket workspace `linchen91`). Locally and in CI the entrypoint is identical: `./scripts/test-terraform.sh`.
+
+### Helm Tests
+
+```bash
+./scripts/test-helm.sh
+```
+
+Runs `helm lint` and `helm template` (with dummy secrets) against [helm/](helm/) — **no cluster or real secrets required**. Needs the `helm` CLI installed (the Terraform deploy path does not).
+
+**CI:** runs in `alpine/helm:3.16.4` on every push; locally the entrypoint is identical: `./scripts/test-helm.sh`.
 
 Repository remotes:
 
@@ -334,7 +352,7 @@ Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolve
 
 Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (asserts the k8s/app role contract: `terraform apply` + `TF_VAR_*` + `kubectl rollout`, no docker compose — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, cluster, credentials, or real secrets are required**.
 
-**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical.
+**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-helm.sh` (in `alpine/helm:3.16.4`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical.
 
 ## Unit Tests
 
