@@ -43,8 +43,9 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   │   ├── axios.js       # Centralized Axios instance with 401 interceptor
 │   │   ├── configContext.jsx  # App configuration context
 │   │   └── eventsContext.jsx  # Real-time events context (WebSocket + REST)
-│   ├── tests/             # Playwright e2e tests (offline, API mocked)
-│   ├── playwright.config.js  # Playwright config (auto-starts Vite via webServer)
+│   ├── tests/             # Playwright e2e tests (offline, API mocked) + azure-live.spec.js (live Azure)
+│   ├── playwright.config.js  # Playwright config (auto-starts Vite via webServer; ignores azure-live)
+│   ├── playwright.azure.config.js  # Playwright config for the live Azure suite (no webServer)
 │   └── package.json
 ├── k8s/                   # Kubernetes deployment manifests
 │   ├── namespace.yml      # Namespace: fastapi-postgres
@@ -83,7 +84,8 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 ├── scripts/
 │   ├── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
 │   ├── test-helm.sh       # helm lint + template entrypoint (local & CI)
-│   └── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
+│   ├── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
+│   └── test-azure.sh      # live Azure deployment smoke test (local/manual only)
 ├── tests/                 # pytest unit tests (offline)
 │   ├── conftest.py        # sys.path bootstrap for test imports
 │   ├── test_ai_summary.py # OpenRouter retry/backoff + error detail tests
@@ -98,6 +100,7 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 ├── requirements-dev.txt   # Test dependencies (pytest)
 ├── .dockerignore          # Docker build exclusions
 ├── .gitignore             # Git ignore rules
+├── AZURE_RUNBOOK.md       # Azure runbook: URLs, resource inventory, costs, redeploy, teardown
 ├── service.py             # Test service
 └── test.py                # PostgreSQL + vector search test (LangChain + LlamaIndex with OpenRouter)
 ```
@@ -354,6 +357,137 @@ Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/pl
 
 **CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-helm.sh` (in `alpine/helm:3.16.4`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical.
 
+## Azure Deployment
+
+The production deployment runs on **Azure Container Apps** + **Azure Database for PostgreSQL** and is
+provisioned with the `az` CLI — it is a *separate path* from the Kubernetes tooling above
+(`terraform/`, `helm/`, `k8s/`, `ansible/` still target minikube). Operational details live in
+[AZURE_RUNBOOK.md](AZURE_RUNBOOK.md).
+
+| | |
+|---|---|
+| App | https://ca-fastapi-ai.jollywave-3dee1d3c.germanywestcentral.azurecontainerapps.io |
+| Swagger | `/docs` |
+| Login | `admin` / `admin123` (seeded on startup — change `ADMIN_PWD_HASH` in [main.py](main.py)) |
+
+| Resource | Name | Region |
+|---|---|---|
+| Resource group | `rg-fastapi-postgres-ai` | germanywestcentral |
+| Container Registry | `acrfastapiai001` | germanywestcentral |
+| Container Apps env | `cae-fastapi-ai` | germanywestcentral |
+| Container App | `ca-fastapi-ai` (0.5 vCPU / 1 Gi, 0–3 replicas) | germanywestcentral |
+| PostgreSQL flexible | `pg-fastapi-ai` (B1ms, 32 GB, PG 16, db `dzservice`) | **switzerlandnorth** |
+
+**Why the database is in Switzerland North:** this subscription is a Free Trial, which is blocked
+(`restricted: Enabled`) from provisioning Azure Database for PostgreSQL in Germany West Central,
+West Europe and most other nearby regions. Switzerland North is the closest unrestricted one.
+Probe a region with the `.../Microsoft.DBforPostgreSQL/locations/<region>/capabilities` endpoint —
+see [AZURE_RUNBOOK.md](AZURE_RUNBOOK.md#why-postgresql-is-in-switzerland-north).
+
+### First deploy
+
+```bash
+az login --use-device-code                      # approve the code in your browser
+AZ_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+az account set --subscription "$AZ_SUBSCRIPTION_ID"
+PG_PASSWORD='<generate-a-strong-password>'      # Azure rejects short/simple passwords
+
+az group create -n rg-fastapi-postgres-ai --location germanywestcentral
+for p in Microsoft.App Microsoft.ContainerRegistry Microsoft.DBforPostgreSQL; do
+  az provider register -n "$p" --wait
+done
+
+az acr create -g rg-fastapi-postgres-ai -n acrfastapiai001 --sku Basic --admin-enabled true
+
+az acr login --name acrfastapiai001
+docker build -t acrfastapiai001.azurecr.io/fastapi-postgres-ai:latest .
+docker push acrfastapiai001.azurecr.io/fastapi-postgres-ai:latest
+
+az postgres flexible-server create -g rg-fastapi-postgres-ai -n pg-fastapi-ai \
+  --location switzerlandnorth --admin-user postgres --admin-password "$PG_PASSWORD" \
+  --sku-name Standard_B1ms --tier Burstable --storage-size 32 --version 16 --public-access 0.0.0.0
+az postgres flexible-server db create -g rg-fastapi-postgres-ai \
+  --server-name pg-fastapi-ai --name dzservice
+
+az containerapp env create -g rg-fastapi-postgres-ai -n cae-fastapi-ai --location germanywestcentral
+
+# Container Apps cannot pull from ACR without credentials (or a managed identity
+# holding AcrPull) — the create call fails at image pull without one of these.
+ACR_USER=$(az acr credential show --name acrfastapiai001 --query username -o tsv)
+ACR_PASS=$(az acr credential show --name acrfastapiai001 --query 'passwords[0].value' -o tsv)
+
+az containerapp create -g rg-fastapi-postgres-ai -n ca-fastapi-ai --environment cae-fastapi-ai \
+  --image acrfastapiai001.azurecr.io/fastapi-postgres-ai:latest \
+  --target-port 8001 --ingress external --cpu 0.5 --memory 1.0Gi \
+  --min-replicas 0 --max-replicas 3 \
+  --registry-server acrfastapiai001.azurecr.io \
+  --registry-username "$ACR_USER" --registry-password "$ACR_PASS" \
+  --env-vars POSTGRES_USER=postgres POSTGRES_PASSWORD="$PG_PASSWORD" \
+    POSTGRES_HOST=pg-fastapi-ai.postgres.database.azure.com POSTGRES_PORT=5432 POSTGRES_DB=dzservice \
+    SECRET_KEY=REPLACE_WITH_YOUR_JWT_SECRET_KEY OPENROUTER_API_KEY=REPLACE_WITH_YOUR_OPENROUTER_API_KEY OPENROUTER_URL=https://openrouter.ai/api/v1 \
+    OPENROUTER_MODEL=openrouter/free TAVILY_API_KEY=REPLACE_WITH_YOUR_TAVILY_API_KEY DB_ECHO=false
+```
+
+### Configuration
+
+The container gets **nothing from `.env`** — it is in `.dockerignore`, so every setting is injected
+through `--env-vars` at deploy time. `POSTGRES_HOST` points at the flexible server's FQDN
+(`pg-fastapi-ai.postgres.database.azure.com`), not the in-cluster `postgres` service name used by
+Kubernetes and Compose.
+
+### Redeploy
+
+```bash
+az acr login --name acrfastapiai001
+docker build -t acrfastapiai001.azurecr.io/fastapi-postgres-ai:$(git rev-parse --short HEAD) .
+docker push acrfastapiai001.azurecr.io/fastapi-postgres-ai:$(git rev-parse --short HEAD)
+az containerapp update -g rg-fastapi-postgres-ai -n ca-fastapi-ai \
+  --image acrfastapiai001.azurecr.io/fastapi-postgres-ai:$(git rev-parse --short HEAD)
+```
+
+The app scales to **zero** replicas when idle, so the first request after a pause cold-starts
+(tens of seconds).
+
+### Verify the deployment
+
+Two suites hit the live site. Both run on demand only — neither is wired into
+[bitbucket-pipelines.yml](bitbucket-pipelines.yml), because the app scales to zero and the Free Trial
+subscription is paused once its credit runs out, so a live check must not gate pull requests.
+
+```bash
+./scripts/test-azure.sh              # HTTP smoke: SPA, assets, config, /docs, /news, auth
+cd frontend && npm run test:azure    # browser: login, bad credentials, dashboard, news page
+```
+
+[scripts/test-azure.sh](scripts/test-azure.sh) retries the first request (cold start) then asserts the
+regressions listed below: `/news` serves without redirecting, `openapi.json` is not `null`, redirects
+stay on `https://`, and an authenticated admin can read `/users/`. Override target or credentials with
+`AZURE_BASE_URL`, `AZURE_ADMIN_ACCOUNT`, `AZURE_ADMIN_PASSWORD`.
+
+`npm run test:azure` runs [frontend/tests/azure-live.spec.js](frontend/tests/azure-live.spec.js) under
+[frontend/playwright.azure.config.js](frontend/playwright.azure.config.js) — no `webServer`, no
+`page.route` mocks, real API. The default `npm run test:e2e` ignores that spec, so CI stays offline.
+
+### Teardown
+
+```bash
+az group delete -n rg-fastapi-postgres-ai --yes --no-wait   # removes everything, incl. Postgres
+```
+
+### Azure-specific pitfalls (already fixed — don't regress these)
+
+1. **Register slash-less paths on both forms.** The frontend calls `GET /news`, so
+   [routers/news.py](routers/news.py) registers `@router.get('')` *and* `@router.get('/')`.
+   Without the bare path Starlette answers `/news` with a `307` whose `Location` is built from the
+   plain-HTTP ASGI scheme — behind Container Apps' TLS terminator that becomes `http://`, and the
+   browser blocks the HTTPS→HTTP downgrade as mixed content (the page shows *"Network Error"*).
+   This is invisible on minikube, where everything is already plain HTTP.
+2. **Run uvicorn with `--proxy-headers --forwarded-allow-ips=*`** (set in the [Dockerfile](Dockerfile))
+   so redirects built from `request.url` use `https://`. Local Compose does not depend on this.
+3. **Return the cached OpenAPI schema.** `custom_openapi()` in [main.py](main.py) must
+   `return openapi_schema` after caching it, otherwise the first request after every cold start
+   responds `null` and Swagger UI loads empty.
+
 ## Unit Tests
 
 Unit tests use **pytest** and live in [tests/](tests/). They cover the async engine connection-pool configuration (`DB_*` env vars, `pool_pre_ping`, recycle, echo) and the AI Summary endpoint's OpenRouter retry/backoff and error-detail behavior.
@@ -377,6 +511,13 @@ npm run test:e2e
 ```
 
 [frontend/playwright.config.js](frontend/playwright.config.js) starts the Vite dev server automatically (`webServer`) on `http://127.0.0.1:5173` — no manual `npm run dev` required. [frontend/vite.config.js](frontend/vite.config.js) binds `127.0.0.1` explicitly so Playwright's probe can reach the dev server (Vite's default `localhost` may bind only `[::1]` on some systems).
+
+**Live Azure suite:** [frontend/tests/azure-live.spec.js](frontend/tests/azure-live.spec.js) runs the same
+flows against the deployed Container App with **no mocks** (real login, real JWT, real `/news`). It uses a
+separate config, [frontend/playwright.azure.config.js](frontend/playwright.azure.config.js) — no `webServer`,
+bigger timeouts for cold starts — and is started with `npm run test:azure`. The default config sets
+`testIgnore` on that file, so `npm run test:e2e` (and CI) never touches Azure. See
+[Verify the deployment](#verify-the-deployment).
 
 **CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `npm ci && npm run test:e2e` in `mcr.microsoft.com/playwright:v1.63.0-noble`. The image version must match `@playwright/test` in [frontend/package.json](frontend/package.json) — bump both together or Chromium lookups fail. On failure, `frontend/test-results/` and `frontend/playwright-report/` are uploaded as build artifacts (both gitignored).
 
@@ -505,7 +646,7 @@ All endpoints (except `/auth/*`) require a valid JWT token in the `Authorization
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | /news | Fetch traffic messages from BR.de (2-min cache) | No |
+| GET | /news | Fetch traffic messages from BR.de (2-min cache). Also served at `/news/` — both paths are registered on purpose (see [Azure Deployment](#azure-deployment)) | No |
 | GET | /news?force=true | Force refresh, bypass cache | No |
 
 ## Models
