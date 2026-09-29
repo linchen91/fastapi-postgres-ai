@@ -120,6 +120,7 @@ def custom_openapi():
         for method in path.values():
             method['security'] = [{'BearerAuth': []}]
     app.openapi_schema = openapi_schema
+    return openapi_schema
 
 app.openapi = custom_openapi
 
