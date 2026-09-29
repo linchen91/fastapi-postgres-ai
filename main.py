@@ -28,11 +28,17 @@ ADMIN_PWD_HASH = '$2b$12$8V10P4sVOhZ9UhTxyXIOFuEtb3.ZDEgW8JTqndVQKL/B5mlx34ggi'
 
 STATIC_DIR = Path(__file__).parent / "static"
 API_PATHS = ("/docs", "/redoc", "/openapi.json", "/auth", "/ai")
+# FastAPI's own doc routes are not SPA routes. They must bypass the text/html
+# fallback below, otherwise a browser navigation to /docs gets index.html
+# (200 OK, blank page) instead of Swagger UI.
+DOC_PATHS = ("/docs", "/redoc", "/openapi.json")
 
 
 class SPAMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+        if path.startswith(DOC_PATHS):
+            return await call_next(request)
         is_api_call = any(path.startswith(p) for p in API_PATHS)
         if not is_api_call:
             file_path = STATIC_DIR / path.lstrip("/")
