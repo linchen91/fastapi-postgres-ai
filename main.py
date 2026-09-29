@@ -6,6 +6,7 @@ warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 from core.security import get_current_user
 from fastapi.openapi.utils import get_openapi
 from fastapi import FastAPI, Depends, Request
+from sqlalchemy import select
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from routers import auth, user, device, role, event, ai_summary, traffic, news, ai_search
@@ -15,7 +16,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from api_io_log import ApiIOMiddleware
-from database import engine
+from database import engine, Base, AsyncSessionLocal
+from models.user import User
+# Register all tables on Base.metadata (side-effect imports; must not shadow
+# the router names user/device/role imported above)
+import models.user, models.device, models.role, models.roledevice  # noqa: F401
+
+ADMIN_ACCOUNT = 'admin'
+# bcrypt hash of 'admin123' — replace before any real deployment
+ADMIN_PWD_HASH = '$2b$12$8V10P4sVOhZ9UhTxyXIOFuEtb3.ZDEgW8JTqndVQKL/B5mlx34ggi'
 
 STATIC_DIR = Path(__file__).parent / "static"
 API_PATHS = ("/docs", "/redoc", "/openapi.json", "/auth", "/ai")
@@ -41,8 +50,27 @@ class SPAMiddleware(BaseHTTPMiddleware):
                 return HTMLResponse(content=index.read_text())
         return await call_next(request)
 
+async def seed_admin():
+    async with AsyncSessionLocal() as session:
+        existing = await session.scalar(
+            select(User).where(User.Account == ADMIN_ACCOUNT)
+        )
+        if existing is None:
+            session.add(User(
+                Account=ADMIN_ACCOUNT,
+                Name='Admin',
+                Email='admin@example.com',
+                Pwd=ADMIN_PWD_HASH,
+                IsActive=True,
+                RoleId=1,
+            ))
+            await session.commit()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    await seed_admin()
     await preload_cache()
     yield
     await engine.dispose()

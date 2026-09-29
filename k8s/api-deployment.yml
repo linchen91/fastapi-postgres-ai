@@ -1,3 +1,16 @@
+# Progress log (2026-09-23): "k8s login failed" fixed — login guaranteed.
+# Root cause 1: dzservice had no tables (app never created them) -> HTTP 500 on
+# POST /auth/token ("relation users does not exist") -> frontend "Login failed".
+#   Fix: main.py lifespan now runs Base.metadata.create_all() + seeds admin
+#   (admin123) on every startup; k8s/db-init.yml rolled back as redundant.
+# Root cause 2: this pod had a stale POSTGRES_PASSWORD (changeme) from before the
+# secret was updated to 123456 -> password auth failed after postgres re-init.
+#   Fix: kubectl rollout restart deploy/api after any secret change (env from
+#   secretKeyRef only updates on pod recreation).
+# Verified: emptied DB self-heals on API restart; correct creds -> 200 + JWT,
+# wrong creds -> 400. Postgres storage migrated emptyDir -> PVC so the DB no
+# longer wipes on pod recreation (that had broken AI Summary auth with
+# "relation users does not exist" while this pod kept running).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

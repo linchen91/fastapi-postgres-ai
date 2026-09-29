@@ -1,3 +1,8 @@
+# Progress log (2026-09-23): "k8s login failed" fixed — login guaranteed by the
+# app itself: main.py lifespan runs Base.metadata.create_all() + seeds the admin
+# user on every startup (db-init.yml rolled back as redundant). Storage is now a
+# PVC (was emptyDir), so DB data survives pod recreation. Details in
+# k8s/api-deployment.yml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,4 +62,17 @@ spec:
             periodSeconds: 20
       volumes:
         - name: postgres-data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: fastapi-postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
