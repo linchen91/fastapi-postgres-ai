@@ -28,6 +28,9 @@ ADMIN_PASSWORD=${AZURE_ADMIN_PASSWORD:-admin123}
 RETRIES=${AZURE_SMOKE_RETRIES:-10}
 RETRY_DELAY=${AZURE_SMOKE_RETRY_DELAY:-6}
 TIMEOUT=${AZURE_SMOKE_TIMEOUT:-90}
+# What a real browser sends — FastAPI's SPAMiddleware serves index.html whenever
+# the request accepts text/html, so testing with curl's default '*/*' misses it.
+BROWSER_ACCEPT='text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 
 BODY=$(mktemp)
 HDRS=$(mktemp)
@@ -93,7 +96,7 @@ echo "==> Azure smoke test against $BASE_URL"
 echo "==> waiting for the app (cold start: $RETRIES attempt(s) x ${RETRY_DELAY}s)"
 attempt=1
 while [ "$attempt" -le "$RETRIES" ]; do
-    fetch -H 'Accept: text/html' "$BASE_URL/"
+    fetch -H "Accept: $BROWSER_ACCEPT" "$BASE_URL/"
     [ "$CODE" = "200" ] && break
     echo "        attempt $attempt/$RETRIES -> HTTP $CODE"
     sleep "$RETRY_DELAY"
@@ -115,7 +118,9 @@ fi
 check "runtime config" 200 "$BASE_URL/config.json"
 body_contains "runtime config defines API_BASE_URL" 'API_BASE_URL'
 
-check "swagger ui" 200 "$BASE_URL/docs"
+check "swagger ui" 200 -H "Accept: $BROWSER_ACCEPT" "$BASE_URL/docs"
+body_contains "swagger ui serves Swagger, not the SPA shell" 'swagger-ui-bundle'
+check "redoc" 200 -H "Accept: $BROWSER_ACCEPT" "$BASE_URL/redoc"
 check "openapi schema" 200 "$BASE_URL/openapi.json"
 body_contains "openapi schema is not null (cold-start regression)" '"openapi"'
 body_contains "openapi schema declares BearerAuth" 'BearerAuth'
