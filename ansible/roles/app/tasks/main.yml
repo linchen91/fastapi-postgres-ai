@@ -5,34 +5,62 @@
     state: directory
     mode: "0755"
 
+- name: Check for an existing checkout with Terraform config
+  ansible.builtin.stat:
+    path: "{{ app_terraform_dir }}/versions.tf"
+  register: app_terraform_config_stat
+
 - name: Clone or update application repository
   ansible.builtin.git:
     repo: "{{ app_repo }}"
     dest: "{{ app_root }}"
     version: "{{ app_version }}"
+  when: not app_terraform_config_stat.stat.exists
 
-- name: Write docker-compose environment file (.env)
-  ansible.builtin.template:
-    src: env.j2
-    dest: "{{ app_root }}/.env"
-    mode: "0600"
-
-- name: Write docker-compose override (secret overrides)
-  ansible.builtin.template:
-    src: docker-compose.override.yml.j2
-    dest: "{{ app_root }}/docker-compose.override.yml"
-    mode: "0600"
-
-- name: Build and start the application stack
+- name: Initialise Terraform
   ansible.builtin.command:
-    cmd: docker compose up -d --build
-    chdir: "{{ app_root }}"
-  register: app_compose_up
+    cmd: terraform init -input=false
+    chdir: "{{ app_terraform_dir }}"
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig_path }}"
+  register: app_terraform_init
+  changed_when: app_terraform_init.stdout is search('Terraform has been successfully initialized')
+  timeout: "{{ app_terraform_init_timeout }}"
+
+- name: Apply Terraform configuration (Kubernetes)
+  ansible.builtin.command:
+    cmd: terraform apply -input=false -auto-approve
+    chdir: "{{ app_terraform_dir }}"
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig_path }}"
+    TF_VAR_namespace: "{{ app_k8s_namespace }}"
+    TF_VAR_api_replicas: "{{ app_api_replicas | string }}"
+    TF_VAR_api_image: "{{ app_api_image }}"
+    TF_VAR_api_image_pull_policy: "{{ app_api_image_pull_policy }}"
+    TF_VAR_secret_key: "{{ secret_key }}"
+    TF_VAR_postgres_user: "{{ postgres_user }}"
+    TF_VAR_postgres_password: "{{ postgres_password }}"
+    TF_VAR_postgres_db: "{{ postgres_db }}"
+    TF_VAR_openrouter_api_key: "{{ openrouter_api_key }}"
+    TF_VAR_openrouter_model: "{{ openrouter_model }}"
+    TF_VAR_openrouter_url: "{{ openrouter_url }}"
+    TF_VAR_tavily_api_key: "{{ tavily_api_key }}"
+  register: app_terraform_apply
   changed_when: >-
-    'Started' in app_compose_up.stdout
-    or 'Recreated' in app_compose_up.stdout
-    or 'Created' in app_compose_up.stdout
-    or 'Built' in app_compose_up.stdout
+    app_terraform_apply.stdout is search('Resources: [1-9][0-9]* added')
+    or app_terraform_apply.stdout is search('Resources: [0-9]+ changed')
+    or app_terraform_apply.stdout is search('Resources: [0-9]+ destroyed')
+  timeout: "{{ app_terraform_apply_timeout }}"
+
+- name: Wait for the API deployment rollout
+  ansible.builtin.command:
+    cmd: >-
+      kubectl rollout status deployment/api
+      -n {{ app_k8s_namespace }} --timeout={{ app_rollout_timeout }}
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig_path }}"
+  register: app_api_rollout_status
+  changed_when: "'successfully rolled out' in app_api_rollout_status.stdout"
 
 - name: Wait for the API health endpoint
   ansible.builtin.uri:
@@ -42,3 +70,4 @@
   retries: "{{ app_health_retries }}"
   delay: "{{ app_health_delay }}"
   until: app_api_health.status | default(-1) == 200
+  when: app_health_check | bool

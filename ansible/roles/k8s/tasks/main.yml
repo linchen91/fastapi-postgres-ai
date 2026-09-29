@@ -1,0 +1,86 @@
+---
+- name: Check for kubectl
+  ansible.builtin.command: kubectl version --client
+  register: k8s_kubectl_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail when kubectl is missing
+  ansible.builtin.fail:
+    msg: >-
+      kubectl is required to deploy to Kubernetes but was not found.
+      Install it (e.g. https://kubernetes.io/docs/tasks/tools/) and retry.
+  when: k8s_kubectl_version_check.rc != 0
+
+- name: Check for terraform
+  ansible.builtin.command: terraform version
+  register: k8s_terraform_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail when terraform is missing
+  ansible.builtin.fail:
+    msg: >-
+      terraform is required (this role wraps `terraform apply`) but was not found.
+      Install it (https://developer.hashicorp.com/terraform/install) and retry.
+  when: k8s_terraform_version_check.rc != 0
+
+- name: Check kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ k8s_kubeconfig_path }}"
+  register: k8s_kubeconfig_stat
+
+- name: Fail when kubeconfig is missing
+  ansible.builtin.fail:
+    msg: >-
+      No kubeconfig at {{ k8s_kubeconfig_path }}.
+      Set KUBECONFIG or copy a cluster kubeconfig there before deploying.
+  when: not k8s_kubeconfig_stat.stat.exists
+
+- name: Check cluster connectivity
+  ansible.builtin.command:
+    cmd: kubectl cluster-info
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig_path }}"
+  register: k8s_cluster_info_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail when the cluster is unreachable
+  ansible.builtin.fail:
+    msg: >-
+      Kubernetes cluster is unreachable via kubeconfig {{ k8s_kubeconfig_path }}.
+      Output: {{ k8s_cluster_info_check.stdout | default('') }} {{ k8s_cluster_info_check.stderr | default('') }}
+  when: k8s_cluster_info_check.rc != 0
+
+- name: Read current kubectl context
+  ansible.builtin.command: kubectl config current-context
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig_path }}"
+  register: k8s_current_context
+  changed_when: false
+  failed_when: false
+
+- name: Check whether the API image is present when pull policy is Never
+  ansible.builtin.command:
+    cmd: "minikube image ls {{ app_api_image }}"
+  environment:
+    KUBECONFIG: "{{ k8s_kubeconfig_path }}"
+  register: k8s_minikube_image_ls
+  changed_when: false
+  failed_when: false
+  when:
+    - app_api_image_pull_policy == 'Never'
+    - "'minikube' in (k8s_current_context.stdout | default(''))"
+
+- name: Fail when the API image is missing from the cluster
+  ansible.builtin.fail:
+    msg: >-
+      app_api_image_pull_policy is 'Never' but {{ app_api_image }} is not loaded in the
+      minikube cluster. Build and load it first:
+      docker build -t {{ app_api_image }} . && minikube image load {{ app_api_image }}
+  when:
+    - app_api_image_pull_policy == 'Never'
+    - "'minikube' in (k8s_current_context.stdout | default(''))"
+    - k8s_minikube_image_ls.rc | default(1) == 0
+    - app_api_image not in (k8s_minikube_image_ls.stdout | default(''))

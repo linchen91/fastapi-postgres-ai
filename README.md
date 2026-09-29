@@ -60,23 +60,23 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   ├── variables.tf       # All tunables (namespace, DB, secrets, images, ports)
 │   ├── namespace.tf       # Namespace resource
 │   ├── config.tf          # ConfigMap + Secret
-│   ├── postgres.tf        # PostgreSQL Deployment + ClusterIP Service
+│   ├── postgres.tf        # PostgreSQL Deployment + PVC (postgres-data) + ClusterIP Service
 │   ├── api.tf             # API Deployment + NodePort Service
 │   ├── outputs.tf         # namespace / service names / node port
 │   ├── terraform.tfvars.example  # Placeholder values (copy to terraform.tfvars)
 │   └── tests/plan.tftest.hcl     # Offline plan assertions (terraform test)
-├── ansible/               # Ansible deployment (Docker host + compose stack)
+├── ansible/               # Ansible deployment (Kubernetes via Terraform)
 │   ├── ansible.cfg        # Inventory/roles defaults (run playbooks from ansible/)
 │   ├── .ansible-lint      # Lint profile for CI
 │   ├── inventory/
 │   │   ├── hosts.yml      # Deploy targets (group: app) + local test group
 │   │   └── group_vars/all.yml  # Non-secret tunables (app_root, app_repo, api_port)
 │   ├── vars/vault.yml.example  # Secret placeholders (copy to vault.yml, gitignored)
-│   ├── playbooks/deploy.yml    # Install Docker, clone repo, compose up, health check
+│   ├── playbooks/deploy.yml    # Verify kubectl/terraform/cluster, terraform apply, rollout wait
 │   ├── playbooks/test_config.yml  # Offline contract assertions (ansible test)
 │   └── roles/
-│       ├── docker/        # Docker engine + compose plugin install
-│       └── app/           # Git deploy, .env + override templates, compose up
+│       ├── k8s/           # kubectl + terraform + kubeconfig + image prereq checks
+│       └── app/           # terraform init/apply (TF_VAR_* from vault), rollout status
 ├── scripts/
 │   ├── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
 │   └── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
@@ -140,6 +140,8 @@ Starts the Vite dev server on `http://127.0.0.1:5173` (bound to IPv4 explicitly 
 
 ### Docker
 
+Local development only — **Ansible no longer deploys this stack** (it wraps Terraform → Kubernetes; see [Ansible Deployment](#ansible-deployment)). Compose remains useful for running the API + Postgres on the host without a cluster:
+
 Build and run with Docker Compose (includes PostgreSQL + API):
 
 ```bash
@@ -172,7 +174,7 @@ docker compose up --build
 
 ### Kubernetes
 
-Deploy to a Kubernetes cluster using the manifests in `k8s/`:
+Deploy to a Kubernetes cluster using the manifests in `k8s/`. **If you already manage this cluster with Terraform, do not also `kubectl apply` these files** — pick one manager (Terraform is the supported path; the raw YAML is an alternative for clusters without Terraform):
 
 ```bash
 # Create namespace and apply all resources
@@ -191,6 +193,12 @@ Or apply everything at once:
 kubectl apply -f k8s/
 ```
 
+Or scale by replicas=number:
+
+```bash
+kubectl scale deployment --all --replicas=0 -n fastapi-postgres
+```
+
 **Resources created:**
 - **Namespace** — `fastapi-postgres`
 - **ConfigMap** (`app-config`) — non-sensitive settings (DB host/port/name, LLM base URL)
@@ -198,7 +206,7 @@ kubectl apply -f k8s/
 - **PostgreSQL** — `postgres:16-alpine` with a `PersistentVolumeClaim` (`postgres-data`, 1Gi) so data survives pod recreation, liveness/readiness probes via `pg_isready`
 - **API** — `fastapi-postgres-ai:latest` (`imagePullPolicy: Never`, expects locally built image), liveness/readiness probes on `/docs`
 
-**API service** type is `NodePort` — access via `<node-ip>:<node-port>`. PostgreSQL uses `ClusterIP` (internal only).
+**API service** type is `NodePort` — access via `<node-ip>:<node-port>` (on minikube: `http://$(minikube ip):<node-port>/docs`, e.g. port `31168`). For `http://localhost:8001` without Compose, run `kubectl port-forward -n fastapi-postgres svc/api 8001:8001` — **only one process may own host port 8001** (Compose container vs port-forward). PostgreSQL uses `ClusterIP` (internal only).
 
 > **Note:** The API image must be built and available to the cluster before deploying. Since `imagePullPolicy: Never`, load the image into your cluster's container runtime first (e.g. `minikube image load fastapi-postgres-ai:latest`).
 
@@ -222,9 +230,11 @@ Postgres stores its data on a PVC (`postgres-data`), so the database survives po
 
 **Progress log (2026-09-23):** "k8s login failed" diagnosed and fixed. Root cause 1: empty database (no tables) → HTTP 500 on `POST /auth/token` (`relation "users" does not exist`) → frontend "Login failed, try again later". Fixed by `create_all` + admin seed in the app lifespan (`k8s/db-init.yml` was introduced as a DB-side alternative, then rolled back as redundant). Root cause 2: API pod held a stale `POSTGRES_PASSWORD` from before the secret was updated → `password authentication failed` after Postgres re-init. Fixed with `kubectl rollout restart deploy/api`. Root cause 3: `emptyDir` storage wiped the DB whenever the Postgres pod was recreated while the API pod kept running → AI Summary and login failed with `relation "users" does not exist`. Fixed by migrating Postgres to a PVC (`postgres-data`). Verified: login `200`, AI Summary `200`, data survives Postgres pod restarts.
 
+**Progress log (2026-09-24):** Runtime switched so **Terraform is the sole owner** of the cluster; Ansible now wraps `terraform apply` (no Compose in the deploy path). Incidents fixed the same day: (1) host port `8001` conflicts when Compose and a `kubectl port-forward` to the API service ran at the same time — only one may bind `8001`; (2) `terraform.tfstate` lost its `resources` array (outputs remained) while objects still existed in the cluster → `namespaces "fastapi-postgres" already exists` on apply; recovered with `terraform import` for every resource; (3) `postgres.tf` still declared `emptyDir` while the live cluster ran the PVC from `k8s/postgres-deployment.yml` — applying would have wiped the DB; config now manages `kubernetes_persistent_volume_claim.postgres`; (4) `terraform.tfvars` `postgres_password` / `tavily_api_key` disagreed with the live Secret — Postgres data dirs only honor the password **at first init**, so tfvars was synced to live values before apply. Verified: `terraform plan` → no changes, login `200`.
+
 ### Terraform Deployment
 
-[terraform/](terraform/) manages the same resources as the raw YAML in `k8s/`, using the Kubernetes provider. The raw manifests remain available as an alternative.
+[terraform/](terraform/) manages the same resources as the raw YAML in `k8s/`, using the Kubernetes provider (namespace, ConfigMap, Secret, API + Postgres Deployments/Services, and the Postgres PVC). The raw manifests remain an alternative for clusters you do not manage with Terraform.
 
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
@@ -237,7 +247,22 @@ terraform -chdir=terraform apply
 
 **Prerequisites:** a reachable Kubernetes cluster and a valid kubeconfig (`config_path`, default `~/.kube/config`). Build/load the API image first (`minikube image load fastapi-postgres-ai:latest`) — `api_image_pull_policy` defaults to `Never`, matching `k8s/`.
 
-Key variables (see [terraform/variables.tf](terraform/variables.tf)): `namespace`, `postgres_*`, `secret_key`, `openrouter_api_key`, `openrouter_model`, `tavily_api_key`, `api_image`, `api_node_port`. State is local (`terraform/terraform.tfstate`, gitignored).
+Key variables (see [terraform/variables.tf](terraform/variables.tf)): `namespace`, `postgres_*`, `secret_key`, `openrouter_api_key`, `openrouter_model`, `tavily_api_key`, `api_image`, `api_replicas`, `api_node_port`. State is local (`terraform/terraform.tfstate`, gitignored).
+
+**Secrets must match the live cluster.** Postgres only applies `POSTGRES_PASSWORD` when it first initializes a data directory — changing the Secret later does not update the existing DB, and a restarted API pod will then authenticate with the wrong password. If `terraform plan` shows a Secret data change you did not intend, either sync `terraform.tfvars` to the live values or plan a deliberate password rotation (re-init the PVC / alter the role).
+
+**State recovery:** if apply fails with `... already exists` while `terraform state list` is empty, objects are in the cluster but missing from state — re-import them rather than destroying:
+
+```bash
+terraform -chdir=terraform import kubernetes_namespace.app fastapi-postgres
+terraform -chdir=terraform import kubernetes_config_map.app fastapi-postgres/app-config
+terraform -chdir=terraform import kubernetes_secret.app fastapi-postgres/app-secrets
+terraform -chdir=terraform import kubernetes_service.api fastapi-postgres/api
+terraform -chdir=terraform import kubernetes_service.postgres fastapi-postgres/postgres
+terraform -chdir=terraform import kubernetes_deployment.api fastapi-postgres/api
+terraform -chdir=terraform import kubernetes_deployment.postgres fastapi-postgres/postgres
+terraform -chdir=terraform import kubernetes_persistent_volume_claim.postgres fastapi-postgres/postgres-data
+```
 
 ### Terraform Tests
 
@@ -258,14 +283,13 @@ Repository remotes:
 
 ### Ansible Deployment
 
-[ansible/](ansible/) provisions a Linux host over SSH: installs Docker, clones this repository, writes runtime config from vault variables, and brings up the Docker Compose stack (the same stack as `docker compose up --build`).
+[ansible/](ansible/) deploys the application to a Kubernetes cluster by wrapping `terraform apply` — the same [terraform/](terraform/) configuration used directly. It does **not** use Docker Compose.
 
-**Prerequisites:** a reachable Linux host (Debian/Ubuntu or RHEL family) with SSH access, and `ansible-core` on the control machine (`pip install ansible-core`).
+**Prerequisites:** `kubectl` + a valid kubeconfig, `terraform`, a reachable cluster, and the API image loaded when `api_image_pull_policy` is `Never` (`minikube image load fastapi-postgres-ai:latest`). On the control machine: `pip install ansible-core`.
 
 ```bash
 cp ansible/vars/vault.yml.example ansible/vars/vault.yml
 # edit ansible/vars/vault.yml — set real secrets (gitignored)
-# edit ansible/inventory/hosts.yml — replace 192.0.2.10 with your host IP
 
 cd ansible
 ansible-playbook playbooks/deploy.yml
@@ -276,27 +300,31 @@ Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolve
 **What it does:**
 
 1. Loads `vars/vault.yml.example`, overridden by `vars/vault.yml` when present (same workflow as `terraform.tfvars`)
-2. **docker role** — installs `docker.io` + `docker-compose-v2` (Debian family) or `docker` + `docker-compose-plugin` (RedHat family), enables the service, creates `app_user`, and adds it to the `docker` group
-3. **app role** — clones the repo to `app_root`, templates `.env` (OpenRouter/Tavily keys interpolated by docker-compose) and `docker-compose.override.yml` (replaces the base file's hardcoded `SECRET_KEY` and DB password), runs `docker compose up -d --build`, then waits for `http://localhost:8001/docs`
+2. **k8s role** — verifies `kubectl`, `terraform`, kubeconfig, cluster connectivity, and (on minikube with pull policy `Never`) that `app_api_image` is loaded
+3. **app role** — clones the repo to `app_root` if missing, runs `terraform init` + `terraform apply -auto-approve` with vault secrets passed as `TF_VAR_*`, then waits for `kubectl rollout status deployment/api`
 
-**Key variables** (defaults in [ansible/inventory/group_vars/all.yml](ansible/inventory/group_vars/all.yml), secrets in [ansible/vars/vault.yml.example](ansible/vars/vault.yml.example)):
+**Terraform remains the sole owner of Kubernetes state** — Ansible only invokes it. Don't mix with ad-hoc `kubectl apply -f k8s/` against the same cluster; pick one manager (see [Terraform Deployment](#terraform-deployment)).
+
+> **Vault vs `terraform.tfvars`:** the playbook exports vault values as `TF_VAR_*`, which **override** `terraform.tfvars` for that run. Keep `vars/vault.yml`, `terraform/terraform.tfvars`, and the live Secret aligned — especially `postgres_password` (Postgres ignores password changes on an existing data directory) — or apply will update the Secret and the API will fail login until the pods are restarted *and* the DB password still matches.
+
+**Key variables** (defaults in [ansible/inventory/group_vars/all.yml](ansible/inventory/group_vars/all.yml) and role defaults, secrets in [ansible/vars/vault.yml.example](ansible/vars/vault.yml.example)):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `app_name` | fastapi-postgres-ai | Application name |
-| `app_root` | /opt/fastapi-postgres-ai | Deployment directory on the target host |
+| `app_root` | /opt/fastapi-postgres-ai | Deployment directory (local inventory overrides to `~/TS/fastapi-postgres-ai`) |
 | `app_repo` | bitbucket URL | Git repository to clone |
 | `app_version` | main | Git ref to deploy |
-| `app_user` | deploy | System user added to the docker group |
-| `api_port` | 8001 | API port used for the health check |
-| `secret_key` | (placeholder) | JWT signing key — override in `vault.yml` |
-| `postgres_user` | (placeholder) | PostgreSQL username — override in `vault.yml` |
-| `postgres_password` | (placeholder) | PostgreSQL password — override in `vault.yml` |
-| `postgres_db` | (placeholder) | PostgreSQL database name — override in `vault.yml` |
-| `openrouter_api_key` / `openrouter_model` / `openrouter_url` | (placeholder) | OpenRouter LLM settings |
-| `tavily_api_key` | (placeholder) | Tavily search API key |
+| `app_user` | deploy | System user (legacy group-var; unused by the K8s path) |
+| `api_port` | 8001 | API port (optional HTTP health check, off by default; rollout status is the primary gate) |
+| `app_k8s_namespace` | fastapi-postgres | Namespace passed to Terraform |
+| `app_api_replicas` | 1 | API replicas passed to Terraform |
+| `secret_key` | (placeholder) | JWT signing key — override in `vault.yml` → `TF_VAR_secret_key` |
+| `postgres_user` / `postgres_password` / `postgres_db` | (placeholder) | PostgreSQL credentials → `TF_VAR_postgres_*` |
+| `openrouter_api_key` / `openrouter_model` / `openrouter_url` | (placeholder) | OpenRouter LLM settings → `TF_VAR_openrouter_*` |
+| `tavily_api_key` | (placeholder) | Tavily search API key → `TF_VAR_tavily_api_key` |
 
-**Inventory:** the `app` group holds deploy targets (default host `app-server`); the `local` group is used only by the offline tests. All modules are `ansible.builtin` — **no Galaxy collections to install**.
+**Inventory:** the `app` group holds deploy targets (default host `app-server`, local connection); the `local` group is used only by the offline tests. All modules are `ansible.builtin` — **no Galaxy collections to install**.
 
 ### Ansible Tests
 
@@ -304,7 +332,7 @@ Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolve
 ./scripts/test-ansible.sh
 ```
 
-Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (renders both templates with placeholder secrets and asserts inventory/group-var contracts — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, Docker, cluster, credentials, or real secrets are required**.
+Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (asserts the k8s/app role contract: `terraform apply` + `TF_VAR_*` + `kubectl rollout`, no docker compose — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, cluster, credentials, or real secrets are required**.
 
 **CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical.
 
