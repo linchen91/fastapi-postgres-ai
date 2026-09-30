@@ -85,12 +85,13 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 │   ├── test-terraform.sh  # fmt + validate + test entrypoint (local & CI)
 │   ├── test-helm.sh       # helm lint + template entrypoint (local & CI)
 │   ├── test-ansible.sh    # lint + syntax-check + offline assertions (local & CI)
-│   └── test-azure.sh      # live Azure deployment smoke test (local/manual only)
+│   ├── test-azure.sh      # live Azure deployment smoke test (local/manual & post-deploy CI step)
+│   └── deploy-azure.sh    # build + push + deploy + verify entrypoint (local & CI)
 ├── tests/                 # pytest unit tests (offline)
 │   ├── conftest.py        # sys.path bootstrap for test imports
 │   ├── test_ai_summary.py # OpenRouter retry/backoff + error detail tests
 │   └── test_database_pool.py  # connection pool config tests
-├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (terraform, helm, ansible & Playwright e2e tests)
+├── bitbucket-pipelines.yml # Bitbucket Pipelines CI (tests on every push; Azure deploy on main)
 ├── logs/                  # Auto-created log directory (YYYY-MM-DD.log files)
 ├── static/                # Built frontend (auto-created by Docker or manual build)
 ├── yolov8n.pt             # YOLOv8 nano model (vehicle detection)
@@ -98,9 +99,9 @@ FastAPI REST API with PostgreSQL database using async SQLAlchemy (asyncpg), feat
 ├── docker-compose.yml     # Docker Compose config (PostgreSQL + API)
 ├── requirements.txt       # Python dependencies
 ├── requirements-dev.txt   # Test dependencies (pytest)
-├── .dockerignore          # Docker build exclusions
+├── .dockerignore          # Build exclusions: .env, tfvars/vault/manifests (no secrets in images)
 ├── .gitignore             # Git ignore rules
-├── AZURE_RUNBOOK.md       # Azure runbook: URLs, resource inventory, costs, redeploy, teardown
+├── AZURE_RUNBOOK.md       # Azure runbook: URLs, resource inventory, CI/CD, costs, redeploy, teardown
 ├── service.py             # Test service
 └── test.py                # PostgreSQL + vector search test (LangChain + LlamaIndex with OpenRouter)
 ```
@@ -355,7 +356,7 @@ Run from inside `ansible/` so [ansible/ansible.cfg](ansible/ansible.cfg) resolve
 
 Runs `ansible-lint`, a syntax-check of [ansible/playbooks/deploy.yml](ansible/playbooks/deploy.yml), `ansible-inventory --list` validation, and the offline assertion playbook [ansible/playbooks/test_config.yml](ansible/playbooks/test_config.yml) (asserts the k8s/app role contract: `terraform apply` + `TF_VAR_*` + `kubectl rollout`, no docker compose — the analogue of the Terraform plan assertions). Tests are fully offline — **no hosts, SSH, cluster, credentials, or real secrets are required**.
 
-**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-helm.sh` (in `alpine/helm:3.16.4`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical.
+**CI:** [bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs `./scripts/test-terraform.sh` (in `hashicorp/terraform:1.9.5`), `./scripts/test-helm.sh` (in `alpine/helm:3.16.4`), `./scripts/test-ansible.sh` (in `python:3.12-slim` after `pip install ansible-core ansible-lint`), and the Playwright e2e suite (in `mcr.microsoft.com/playwright:v1.63.0-noble`) on every push. Locally and in CI the entrypoints are identical. Pushes to `main` continue with the Azure deploy steps described under [Azure Deployment](#azure-deployment).
 
 ## Azure Deployment
 
@@ -363,6 +364,9 @@ The production deployment runs on **Azure Container Apps** + **Azure Database fo
 provisioned with the `az` CLI — it is a *separate path* from the Kubernetes tooling above
 (`terraform/`, `helm/`, `k8s/`, `ansible/` still target minikube). Operational details live in
 [AZURE_RUNBOOK.md](AZURE_RUNBOOK.md).
+
+Deploys happen in two ways: manually with `./scripts/deploy-azure.sh`, or from **Bitbucket Pipelines**
+(tests on every push, deploy on `main`) — see [Deploy via Bitbucket Pipelines](#deploy-via-bitbucket-pipelines).
 
 | | |
 |---|---|
@@ -435,6 +439,14 @@ through `--env-vars` at deploy time. `POSTGRES_HOST` points at the flexible serv
 (`pg-fastapi-ai.postgres.database.azure.com`), not the in-cluster `postgres` service name used by
 Kubernetes and Compose.
 
+`.dockerignore` also excludes `terraform/`, `helm/`, `k8s/` and `ansible/`: none of it is needed at
+runtime, and `COPY . .` would otherwise bake their credentials into every image pushed to ACR. Real values
+live in `terraform/terraform.tfvars`, `ansible/vars/vault.yml` and `k8s/secret.yml` — `secret_key`,
+`postgres_password`, the OpenRouter and Tavily keys. Images built before that exclusion (`adb5ce6*`,
+`swaggerfix`) do contain them; `69f2e12` and later do not (verified: none of those paths exists in the
+image). Delete the old tags and rotate the values — see
+[AZURE_RUNBOOK.md](AZURE_RUNBOOK.md#secrets-never-reach-the-image).
+
 ### Redeploy
 
 ```bash
@@ -445,14 +457,78 @@ az containerapp update -g rg-fastapi-postgres-ai -n ca-fastapi-ai \
   --image acrfastapiai001.azurecr.io/fastapi-postgres-ai:$(git rev-parse --short HEAD)
 ```
 
+The same three commands (plus the live smoke test) are wrapped by
+[scripts/deploy-azure.sh](scripts/deploy-azure.sh) — the entrypoint used both locally and in CI:
+
+```bash
+./scripts/deploy-azure.sh          # build -> push -> update -> verify
+./scripts/deploy-azure.sh build    # just docker build + push
+DRY_RUN=1 ./scripts/deploy-azure.sh all   # print the commands without running them
+```
+
 The app scales to **zero** replicas when idle, so the first request after a pause cold-starts
 (tens of seconds).
 
+### Deploy via Bitbucket Pipelines
+
+[bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs the four test steps on **every push**, and on
+**`main`** continues with three deploy steps — each one calling
+[scripts/deploy-azure.sh](scripts/deploy-azure.sh), so CI and local runs execute identical commands:
+
+| Step | Image | Script action |
+|---|---|---|
+| Build & push image to ACR | `docker:27.5-cli` (Docker service, 3072 MB) | `./scripts/deploy-azure.sh build` |
+| Deploy image to Container Apps | `mcr.microsoft.com/azure-cli:2.79.0` | `./scripts/deploy-azure.sh update` |
+| Verify live deployment | `alpine:3.22` | `./scripts/deploy-azure.sh verify` |
+
+A redeploy without a code change can be started manually: **Pipelines → Run pipeline → `deploy-azure`**
+(custom pipeline: the same three steps, no tests).
+
+Setup is one-time — add these as **repository variables** (Bitbucket → Repository settings → Variables),
+marking the two secret ones as *secured*:
+
+| Variable | Secured | Value |
+|---|---|---|
+| `ACR_LOGIN_SERVER` | no | `acrfastapiai001.azurecr.io` |
+| `ACR_USERNAME` | no | ACR admin user (`az acr credential show`) |
+| `ACR_PASSWORD` | **yes** | ACR admin password (`az acr credential show`) |
+| `AZ_RESOURCE_GROUP` | no | `rg-fastapi-postgres-ai` |
+| `CA_NAME` | no | `ca-fastapi-ai` |
+| `AZURE_TENANT_ID` | no | `174cc61a-d946-4fe4-a087-64d9809e04ba` |
+| `AZURE_CLIENT_ID` | no | service principal `sp-fastapi-postgres-ai-ci` (application ID) |
+| `AZURE_CLIENT_SECRET` | **yes** | service principal password — printed once at creation, stored in `bitbucket-ci.env` |
+| `AZURE_SUBSCRIPTION_ID` | no | `e3fba42e-66f5-48e3-8950-dd72016da2bf` |
+
+The pipeline authenticates to Azure as a **service principal** scoped to the resource group (the `update`
+step needs ARM access to point `ca-fastapi-ai` at the new image; ACR push uses the admin credentials above).
+It already exists as `sp-fastapi-postgres-ai-ci`, with a copy of all three values in
+`~/.config/fastapi-postgres-ai/bitbucket-ci.env` (`chmod 600`, outside the repo). To recreate it — the
+secret is only printed once:
+
+```bash
+az ad sp create-for-rbac --name sp-fastapi-postgres-ai-ci \
+  --role contributor \
+  --scopes /subscriptions/e3fba42e-66f5-48e3-8950-dd72016da2bf/resourceGroups/rg-fastapi-postgres-ai \
+  --years 2
+```
+
+Output maps `appId` → `AZURE_CLIENT_ID`, `password` → `AZURE_CLIENT_SECRET`, `tenant` → `AZURE_TENANT_ID`;
+paste them into Bitbucket immediately. Locally nothing changes: your `az` login and
+`~/.config/fastapi-postgres-ai/azure.env` are still what the script uses — the service principal is only
+picked up when all three `AZURE_*` variables are set (i.e. in CI).
+
+Notes: Docker builds count as **2× build minutes** on Bitbucket's free tier, and the smoke test at the end
+of a deploy fails the pipeline if the app does not answer — that is deliberate for a deploy, which is why it
+stays out of the `default` (test-only) pipeline. Full detail in
+[AZURE_RUNBOOK.md](AZURE_RUNBOOK.md#cicd-bitbucket-pipelines).
+
 ### Verify the deployment
 
-Two suites hit the live site. Both run on demand only — neither is wired into
-[bitbucket-pipelines.yml](bitbucket-pipelines.yml), because the app scales to zero and the Free Trial
-subscription is paused once its credit runs out, so a live check must not gate pull requests.
+Two suites hit the live site. Neither runs on an ordinary push: [bitbucket-pipelines.yml](bitbucket-pipelines.yml)
+keeps its `default` pipeline offline-only, because the app scales to zero and the Free Trial subscription is
+paused once its credit runs out, so a live check must not gate pull requests. The HTTP smoke suite *does* run
+automatically as the last step of an Azure deploy (`main` push or the manual `deploy-azure` pipeline), where a
+live check is exactly the point — with `AZURE_SMOKE_RETRIES=20` to ride out the cold start.
 
 ```bash
 ./scripts/test-azure.sh              # HTTP smoke: SPA, assets, config, /docs + /redoc, /news, auth

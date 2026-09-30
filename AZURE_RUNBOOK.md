@@ -30,7 +30,7 @@ export PATH=/tmp/opencode/azcli/bin:$PATH   # az CLI installed in a venv
 | PostgreSQL flexible | `pg-fastapi-ai` | **switzerlandnorth** | Burstable `Standard_B1ms`, 32 GB, PG 16 |
 | Log Analytics | `workspace-rgfastapipostgresaiznNg` | germanywestcentral | — |
 
-Image: `acrfastapiai001.azurecr.io/fastapi-postgres-ai:adb5ce6-openapifix` (also tagged `latest`).
+Image: `acrfastapiai001.azurecr.io/fastapi-postgres-ai:69f2e12` (also tagged `latest`).
 
 ### Why PostgreSQL is in Switzerland North
 
@@ -106,11 +106,95 @@ az containerapp replica list -g $AZ_RESOURCE_GROUP -n $CA_NAME -o table
 az postgres flexible-server show -g $AZ_RESOURCE_GROUP -n $PG_SERVER --query state -o tsv
 ```
 
+## CI/CD (Bitbucket Pipelines)
+
+[bitbucket-pipelines.yml](bitbucket-pipelines.yml) runs the same deploy as
+[Redeploy](#redeploy-code-changes), through the single entrypoint
+[scripts/deploy-azure.sh](scripts/deploy-azure.sh) — identical commands locally and in CI.
+
+| Trigger | Steps |
+|---|---|
+| any push / PR | terraform, helm, ansible, Playwright e2e — all offline, never touches Azure |
+| push to `main` | the four test steps, then **build & push → deploy → verify** |
+| Pipelines → Run pipeline → `deploy-azure` | build & push → deploy → verify only (redeploy, no code change) |
+
+| Step | Image | Runs |
+|---|---|---|
+| Build & push image to ACR | `docker:27.5-cli` + `services: [docker]` | `./scripts/deploy-azure.sh build` |
+| Deploy image to Container Apps | `mcr.microsoft.com/azure-cli:2.79.0` | `./scripts/deploy-azure.sh update` |
+| Verify live deployment | `alpine:3.22` (`apk add curl`) | `./scripts/deploy-azure.sh verify` |
+
+The image tag is the first 7 chars of `$BITBUCKET_COMMIT` (locally `git rev-parse --short HEAD`), plus
+`latest`. The Docker service is set to `memory: 3072` — the 1024 MB default is too small for the
+multi-stage build (`npm ci` + `pip install`), and 3072 is the maximum for a 1x step.
+
+### Repository variables
+
+Bitbucket → Repository settings → Variables. Mark the two secret ones as **secured** (they are masked in
+build logs); everything else can stay plain.
+
+| Variable | Secured | Value |
+|---|---|---|
+| `ACR_LOGIN_SERVER` | no | `acrfastapiai001.azurecr.io` |
+| `ACR_USERNAME` | no | `az acr credential show --name acrfastapiai001 --query username -o tsv` |
+| `ACR_PASSWORD` | **yes** | `az acr credential show --name acrfastapiai001 --query 'passwords[0].value' -o tsv` |
+| `AZ_RESOURCE_GROUP` | no | `rg-fastapi-postgres-ai` |
+| `CA_NAME` | no | `ca-fastapi-ai` |
+| `AZURE_TENANT_ID` | no | `174cc61a-d946-4fe4-a087-64d9809e04ba` |
+| `AZURE_CLIENT_ID` | no | service principal `appId` |
+| `AZURE_CLIENT_SECRET` | **yes** | service principal `password` |
+| `AZURE_SUBSCRIPTION_ID` | no | `e3fba42e-66f5-48e3-8950-dd72016da2bf` |
+
+### Service principal
+
+`az containerapp update` needs ARM access, so CI logs in as a service principal scoped to the resource
+group (ACR push uses the admin credentials above):
+
+```bash
+az ad sp create-for-rbac --name sp-fastapi-postgres-ai-ci \
+  --role contributor \
+  --scopes /subscriptions/e3fba42e-66f5-48e3-8950-dd72016da2bf/resourceGroups/rg-fastapi-postgres-ai \
+  --years 2
+```
+
+`appId` → `AZURE_CLIENT_ID`, `password` → `AZURE_CLIENT_SECRET`, `tenant` → `AZURE_TENANT_ID`. The
+`password` is shown **once** — paste it into Bitbucket immediately and delete this line from your shell
+history if you care. A local copy of all three lives in `~/.config/fastapi-postgres-ai/bitbucket-ci.env`
+(`chmod 600`, gitignored by virtue of living outside the repo). Revoke with `az ad sp delete --id <appId>`;
+secrets older than the `--years` window stop working silently (the deploy step then fails at `az login`).
+
+Locally nothing changes: `./scripts/deploy-azure.sh` uses your own `az` login plus
+`~/.config/fastapi-postgres-ai/azure.env`, and only falls back to the service principal when the three
+`AZURE_*` variables are set (i.e. in CI).
+
+### Secrets never reach the image
+
+`.dockerignore` excludes `terraform/`, `helm/`, `k8s/` and `ansible/`: none is needed at runtime, and
+`COPY . .` would otherwise bake their credentials into an image that then gets pushed to ACR. The real
+values are in `terraform/terraform.tfvars`, `ansible/vars/vault.yml` and `k8s/secret.yml` (`secret_key`,
+`postgres_password`, OpenRouter and Tavily keys); `.env` was already excluded. `terraform/terraform.tfstate`
+ships in the old tags as well — its sensitive entries are stored as `"status": "unknown"`, so no usable
+value leaks from that file, but a state file has no business inside a runtime image either. Keep all of it
+excluded.
+
+Images tagged before the exclusion — `adb5ce6`, `adb5ce6-newsfix`, `adb5ce6-openapifix`, `swaggerfix` —
+contain the real `terraform/terraform.tfvars`, `ansible/vars/vault.yml` and `k8s/secret.yml` (confirmed by
+unpacking `adb5ce6-openapifix`: `secret_key = 1064f…`, `openrouter_api_key = sk-or…`,
+`tavily_api_key = AIzaS…`). `69f2e12` and later are clean — confirmed the same paths are absent from that
+image. Remove the old tags and rotate the values:
+
+```bash
+az acr repository show-tags -n acrfastapiai001 --repository fastapi-postgres-ai -o tsv
+az acr repository delete -n acrfastapiai001 --image fastapi-postgres-ai:adb5ce6-openapifix --yes
+```
+
 ## Verify
 
-Run on demand after any deploy — both suites hit the live URL, both are intentionally **not** in
-`bitbucket-pipelines.yml` (the app scales to zero and Azure pauses the Free Trial subscription when its
-credit runs out, so a live check must not block a push).
+Run on demand after any deploy — both suites hit the live URL. Neither runs in the `default`
+(test-only) pipeline: the app scales to zero and Azure pauses the Free Trial subscription when its credit
+runs out, so a live check must not block a plain push. The HTTP smoke suite does run automatically as the
+last step of an Azure deploy (`main` push or the manual `deploy-azure` pipeline) with
+`AZURE_SMOKE_RETRIES=20`; the browser suite stays manual.
 
 ```bash
 ./scripts/test-azure.sh              # HTTP smoke — 22 assertions
