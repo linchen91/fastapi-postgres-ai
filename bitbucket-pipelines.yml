@@ -4,10 +4,13 @@ definitions:
   caches:
     terraform: terraform/.terraform
     npm: ~/.npm
-
-pipelines:
-  default:
-    - step:
+  services:
+    docker:
+      # The Docker service gets 1024 MB by default, which is not enough to build
+      # the multi-stage image (npm ci + pip install). Max for a 1x step.
+      memory: 3072
+  steps:
+    - step: &test-terraform
         name: Terraform fmt, validate & test
         image: hashicorp/terraform:1.9.5
         caches:
@@ -16,20 +19,20 @@ pipelines:
           - apk add --no-cache bash
           - chmod +x scripts/test-terraform.sh
           - ./scripts/test-terraform.sh
-    - step:
+    - step: &test-helm
         name: Helm chart lint & template
         image: alpine/helm:3.16.4
         script:
           - chmod +x scripts/test-helm.sh
           - ./scripts/test-helm.sh
-    - step:
+    - step: &test-ansible
         name: Ansible lint, syntax-check & tests
         image: python:3.12-slim
         script:
           - pip install --quiet ansible-core ansible-lint
           - chmod +x scripts/test-ansible.sh
           - ./scripts/test-ansible.sh
-    - step:
+    - step: &test-playwright
         name: Frontend e2e (Playwright)
         # Image version must match @playwright/test in frontend/package.json (1.63.0)
         # so the preinstalled Chromium matches the npm package.
@@ -43,3 +46,47 @@ pipelines:
         artifacts:
           - frontend/test-results/**
           - frontend/playwright-report/**
+    - step: &azure-build
+        name: Build & push image to ACR
+        image: docker:27.5-cli
+        services:
+          - docker
+        caches:
+          - docker
+        script:
+          - chmod +x scripts/deploy-azure.sh
+          - ./scripts/deploy-azure.sh build
+    - step: &azure-update
+        name: Deploy image to Container Apps
+        image: mcr.microsoft.com/azure-cli:2.79.0
+        script:
+          - chmod +x scripts/deploy-azure.sh
+          - ./scripts/deploy-azure.sh update
+    - step: &azure-verify
+        name: Verify live deployment
+        image: alpine:3.22
+        script:
+          - apk add --no-cache curl
+          - chmod +x scripts/deploy-azure.sh
+          - ./scripts/deploy-azure.sh verify
+
+pipelines:
+  default:
+    - step: *test-terraform
+    - step: *test-helm
+    - step: *test-ansible
+    - step: *test-playwright
+  branches:
+    main:
+      - step: *test-terraform
+      - step: *test-helm
+      - step: *test-ansible
+      - step: *test-playwright
+      - step: *azure-build
+      - step: *azure-update
+      - step: *azure-verify
+  custom:
+    deploy-azure:
+      - step: *azure-build
+      - step: *azure-update
+      - step: *azure-verify

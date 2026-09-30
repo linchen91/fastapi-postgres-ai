@@ -1,8 +1,9 @@
 #!/bin/sh
-# Canonical Azure deployment smoke test. Run on demand — deliberately NOT wired
-# into bitbucket-pipelines.yml: it hits the live Container Apps URL, which is
-# scaled to zero when idle and lives on a Free Trial subscription that Azure
-# pauses when its credit runs out, so it must not gate pull requests.
+# Canonical Azure deployment smoke test. Runs on demand (`./scripts/test-azure.sh`)
+# and as the last step of an Azure deploy (`./scripts/deploy-azure.sh verify`) —
+# never from the test-only default pipeline: it hits the live Container Apps URL,
+# which scales to zero when idle and lives on a Free Trial subscription that Azure
+# pauses when its credit runs out, so it must not gate an ordinary push.
 #
 # Usage:   ./scripts/test-azure.sh
 # Env:     AZURE_BASE_URL              target (default: the deployed FQDN)
