@@ -517,9 +517,13 @@ paste them into Bitbucket immediately. Locally nothing changes: your `az` login 
 `~/.config/fastapi-postgres-ai/azure.env` are still what the script uses — the service principal is only
 picked up when all three `AZURE_*` variables are set (i.e. in CI).
 
-Notes: Docker builds count as **2× build minutes** on Bitbucket's free tier, and the smoke test at the end
-of a deploy fails the pipeline if the app does not answer — that is deliberate for a deploy, which is why it
-stays out of the `default` (test-only) pipeline. Full detail in
+Notes: the build step exports `DOCKER_BUILDKIT=0` because Bitbucket's docker service blocks the
+`--privileged` builder container that buildx (docker ≥ 23's default `docker build`) wants to start —
+`authorization denied by plugin pipelines`, workaround per
+[BCLOUD-22066](https://jira.atlassian.com/browse/BCLOUD-22066); the Dockerfile uses no BuildKit-only
+syntax. Docker builds count as **2× build minutes** on Bitbucket's free tier, and the smoke test at the
+end of a deploy fails the pipeline if the app does not answer — that is deliberate for a deploy, which is
+why it stays out of the `default` (test-only) pipeline. Full detail in
 [AZURE_RUNBOOK.md](AZURE_RUNBOOK.md#cicd-bitbucket-pipelines).
 
 ### Verify the deployment

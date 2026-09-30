@@ -128,6 +128,12 @@ The image tag is the first 7 chars of `$BITBUCKET_COMMIT` (locally `git rev-pars
 `latest`. The Docker service is set to `memory: 3072` — the 1024 MB default is too small for the
 multi-stage build (`npm ci` + `pip install`), and 3072 is the maximum for a 1x step.
 
+The build step exports `DOCKER_BUILDKIT=0`: with docker ≥ 23, `docker build` is an alias for
+`docker buildx build`, whose builder container starts with `--privileged=true` — which Bitbucket's
+docker service rejects (`authorization denied by plugin pipelines`). The legacy builder is Atlassian's
+documented workaround ([BCLOUD-22066](https://jira.atlassian.com/browse/BCLOUD-22066)); the Dockerfile
+uses no BuildKit-only syntax, so it builds the same image. Do not remove that line.
+
 ### Repository variables
 
 Bitbucket → Repository settings → Variables. Mark the two secret ones as **secured** (they are masked in
