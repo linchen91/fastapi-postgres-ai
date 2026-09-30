@@ -54,6 +54,10 @@ definitions:
         caches:
           - docker
         script:
+          # docker >= 23 turns `docker build` into buildx, whose builder container
+          # needs --privileged — blocked by Bitbucket (denied by plugin pipelines).
+          # Legacy builder = Atlassian's documented workaround (BCLOUD-22066).
+          - export DOCKER_BUILDKIT=0
           - chmod +x scripts/deploy-azure.sh
           - ./scripts/deploy-azure.sh build
     - step: &azure-update
