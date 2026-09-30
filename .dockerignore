@@ -14,3 +14,13 @@ logs/
 frontend/node_modules
 frontend/.vite
 frontend/dist
+frontend/test-results
+frontend/playwright-report
+.pytest_cache
+# Deployment tooling and its credentials — terraform.tfvars, ansible/vars/vault.yml and
+# k8s/secret.yml hold the real secret_key/postgres_password/OpenRouter/Tavily values and
+# must never reach an image pushed to ACR. None of it is needed at runtime.
+terraform/
+helm/
+k8s/
+ansible/
