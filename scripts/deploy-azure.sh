@@ -12,9 +12,11 @@
 #
 # Env (defaults are loaded from ~/.config/fastapi-postgres-ai/azure.env when present):
 #   ACR_LOGIN_SERVER   default acrfastapiai001.azurecr.io
-#   ACR_USERNAME / ACR_PASSWORD     ACR push credentials (optional: reuses an
-#                                   existing `docker login` when unset — e.g. after
-#                                   `az acr login --name $ACR_NAME`)
+#   ACR_USERNAME / ACR_PASSWORD     ACR push credentials — REQUIRED in Bitbucket
+#                                   Pipelines (the build fails fast without them);
+#                                   locally optional: reuses an existing
+#                                   `docker login` when unset — e.g. after
+#                                   `az acr login --name $ACR_NAME`
 #   AZ_RESOURCE_GROUP  default rg-fastapi-postgres-ai
 #   CA_NAME            default ca-fastapi-ai
 #   IMAGE_NAME         default fastapi-postgres-ai
@@ -117,6 +119,10 @@ build() {
     if [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ]; then
         printf '%s' "$ACR_PASSWORD" | run docker login "$ACR_LOGIN_SERVER" \
             --username "$ACR_USERNAME" --password-stdin
+    elif [ -n "${BITBUCKET_BUILD_NUMBER:-}" ]; then
+        # A fresh CI step has no docker credentials, so a missing variable only
+        # surfaces after the full build as an opaque UNAUTHORIZED from the push.
+        die "ACR_USERNAME/ACR_PASSWORD not set as Bitbucket repository variables (push would fail with UNAUTHORIZED)"
     else
         echo "ACR_USERNAME/ACR_PASSWORD not set — reusing existing docker credentials"
     fi
