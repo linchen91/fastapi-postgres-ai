@@ -13,6 +13,7 @@ import { EventsProvider } from "./eventsContext"
 const DevicesMap = lazy(() => import('./pages/DevicesMap'))
 const News = lazy(() => import('./pages/News'))
 const AISearch = lazy(() => import('./pages/AISearch'))
+const DataAnalysis = lazy(() => import('./pages/DataAnalysis'))
 
 function ProtectedRoute({token, children}) {
   if (!token)
@@ -35,6 +36,7 @@ function Layout({token, setToken, account}) {
           <Route path='events' element={<ProtectedRoute token={token}><Events /></ProtectedRoute>} />
           <Route path='news' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading news...</div>}><News /></Suspense></ProtectedRoute>} />
           <Route path='ai/search' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading search assistant...</div>}><AISearch /></Suspense></ProtectedRoute>} />
+          <Route path='ai/data' element={<ProtectedRoute token={token}><Suspense fallback={<div className='text-center p-4'>Loading data analysis...</div>}><DataAnalysis /></Suspense></ProtectedRoute>} />
         </Routes>
       </div>
     </div>

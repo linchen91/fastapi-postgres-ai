@@ -4,9 +4,9 @@ import os, httpx, datetime, asyncio
 
 router = APIRouter()
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_URL = os.getenv("OPENROUTER_URL")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL")
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL")
+LLM_BASE_MODEL = os.getenv("LLM_BASE_MODEL")
 
 def build_messages(stats: dict):
     today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -42,7 +42,7 @@ def build_messages(stats: dict):
         {"role": "user", "content": user}
     ]
     
-def _openrouter_error_detail(r: httpx.Response) -> str:
+def _llm_error_detail(r: httpx.Response) -> str:
     try:
         message = r.json().get("error", {}).get("message")
     except ValueError:
@@ -56,7 +56,7 @@ MAX_ATTEMPTS = 3
 
 @router.post("/summary")
 async def ai_summary(payload: dict):
-    if not OPENROUTER_API_KEY or not OPENROUTER_URL or not OPENROUTER_MODEL:
+    if not LLM_API_KEY or not LLM_BASE_URL or not LLM_BASE_MODEL:
         raise HTTPException(status_code=500, detail="OpenRouter API configuration is missing.")
 
     stats = payload.get('stats')
@@ -64,21 +64,21 @@ async def ai_summary(payload: dict):
         raise HTTPException(status_code=400, detail="Missing 'stats' in request payload.")
 
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {LLM_API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "http://localhost:8001",  # Example referrer, adjust as needed
         "X-Title": "AI Summary Request"  # Example title, adjust as needed
     }
 
     data = {
-        'model': OPENROUTER_MODEL,
+        'model': LLM_BASE_MODEL,
         'messages': build_messages(stats),
         'temperature': 0.2
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
         for attempt in range(MAX_ATTEMPTS):
-            r = await client.post(f"{OPENROUTER_URL}/chat/completions", headers=headers, json=data)
+            r = await client.post(f"{LLM_BASE_URL}/chat/completions", headers=headers, json=data)
 
             if r.status_code == 200:
                 j = r.json()
@@ -86,7 +86,7 @@ async def ai_summary(payload: dict):
 
                 return {"summary": content}
 
-            detail = _openrouter_error_detail(r)
+            detail = _llm_error_detail(r)
 
             if r.status_code in RETRYABLE_STATUS and attempt < MAX_ATTEMPTS - 1:
                 await asyncio.sleep(2 ** (attempt + 1))

@@ -41,9 +41,9 @@
     TF_VAR_postgres_user: "{{ postgres_user }}"
     TF_VAR_postgres_password: "{{ postgres_password }}"
     TF_VAR_postgres_db: "{{ postgres_db }}"
-    TF_VAR_openrouter_api_key: "{{ openrouter_api_key }}"
-    TF_VAR_openrouter_model: "{{ openrouter_model }}"
-    TF_VAR_openrouter_url: "{{ openrouter_url }}"
+    TF_VAR_llm_api_key: "{{ llm_api_key }}"
+    TF_VAR_llm_model: "{{ llm_model }}"
+    TF_VAR_llm_url: "{{ llm_url }}"
     TF_VAR_tavily_api_key: "{{ tavily_api_key }}"
   register: app_terraform_apply
   changed_when: >-

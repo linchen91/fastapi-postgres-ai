@@ -9,7 +9,7 @@ from fastapi import FastAPI, Depends, Request
 from sqlalchemy import select
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
-from routers import auth, user, device, role, event, ai_summary, traffic, news, ai_search
+from routers import auth, user, device, role, event, ai_summary, traffic, news, ai_search, data_analysis
 from routers.news import preload_cache
 import uvicorn
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -102,6 +102,7 @@ app.include_router(role.router, prefix='/roles', tags=['Roles'], dependencies=[D
 app.include_router(event.router, prefix='/events', tags=['Events'])
 app.include_router(ai_summary.router, prefix='/ai', tags=['AI'], dependencies=[Depends(get_current_user)])
 app.include_router(ai_search.router, prefix='/ai', tags=['AI'])
+app.include_router(data_analysis.router, prefix='/ai', tags=['AI'])
 app.include_router(traffic.router, prefix='/ai/traffic', tags=['AI'], dependencies=[Depends(get_current_user)])
 app.include_router(news.router, prefix='/news', tags=['News'])
 

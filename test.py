@@ -118,9 +118,9 @@ if __name__ == "__main__":
 
     Settings.embed_model = HuggingFaceEmbedding(model_name="all-MiniLM-L6-v2")
     Settings.llm = OpenAILike(
-        model=os.getenv("OPENROUTER_MODEL"),
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        api_base=os.getenv("OPENROUTER_URL", "https://openrouter.ai/api/v1"),
+        model=os.getenv("LLM_BASE_MODEL"),
+        api_key=os.getenv("LLM_API_KEY"),
+        api_base=os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
         temperature=0.7,
     )
 

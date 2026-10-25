@@ -20,7 +20,7 @@ resource "helm_release" "app" {
       postgresHost  = var.postgres_host
       postgresPort  = var.postgres_port
       postgresDb    = var.postgres_db
-      openrouterUrl = var.openrouter_url
+      openrouterUrl = var.llm_url
     }
 
     secret = {
@@ -28,9 +28,9 @@ resource "helm_release" "app" {
       postgresUser     = var.postgres_user
       postgresPassword = var.postgres_password
       secretKey        = var.secret_key
-      openrouterApiKey = var.openrouter_api_key
-      openrouterModel  = var.openrouter_model
-      openrouterUrl    = var.openrouter_url
+      openrouterApiKey = var.llm_api_key
+      openrouterModel  = var.llm_model
+      openrouterUrl    = var.llm_url
       tavilyApiKey     = var.tavily_api_key
     }
 

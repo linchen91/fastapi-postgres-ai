@@ -23,7 +23,7 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Overwrite config.json for container deployment (same-origin, no CORS)
 ARG API_BASE_URL=/
-RUN echo '{"API_BASE_URL":"'"${API_BASE_URL}"'","APP_TITLE":"Traffic Control System"}' \
+RUN echo '{"API_BASE_URL":"'"${API_BASE_URL}"'","APP_TITLE":"Agent Control System"}' \
     > static/config.json
 
 RUN mkdir -p logs

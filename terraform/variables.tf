@@ -81,24 +81,24 @@ variable "secret_key" {
   }
 }
 
-variable "openrouter_api_key" {
+variable "llm_api_key" {
   description = "OpenRouter API key."
   type        = string
   sensitive   = true
 
   validation {
-    condition     = length(var.openrouter_api_key) > 0
-    error_message = "openrouter_api_key must not be empty."
+    condition     = length(var.llm_api_key) > 0
+    error_message = "llm_api_key must not be empty."
   }
 }
 
-variable "openrouter_model" {
+variable "llm_model" {
   description = "OpenRouter model identifier."
   type        = string
   default     = "openrouter/free"
 }
 
-variable "openrouter_url" {
+variable "llm_url" {
   description = "OpenRouter API base URL."
   type        = string
   default     = "https://openrouter.ai/api/v1"

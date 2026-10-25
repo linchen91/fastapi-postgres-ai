@@ -63,7 +63,7 @@ so it is never baked into the image. Injected on `ca-fastapi-ai`:
 | `POSTGRES_HOST` | `pg-fastapi-ai.postgres.database.azure.com` |
 | `POSTGRES_PORT` | `5432` |
 | `POSTGRES_DB` | `dzservice` |
-| `SECRET_KEY`, `OPENROUTER_*`, `TAVILY_API_KEY` | from repo `.env` |
+| `SECRET_KEY`, `LLM_*`, `TAVILY_API_KEY` | from repo `.env` |
 | `DB_ECHO` | `false` |
 
 Postgres firewall rule `AllowAllAzureServicesAndResourcesWithinAzureIps_*` accepts Azure-internal IPs.
@@ -185,7 +185,7 @@ excluded.
 
 Images tagged before the exclusion — `adb5ce6`, `adb5ce6-newsfix`, `adb5ce6-openapifix`, `swaggerfix` —
 contain the real `terraform/terraform.tfvars`, `ansible/vars/vault.yml` and `k8s/secret.yml` (confirmed by
-unpacking `adb5ce6-openapifix`: `secret_key = 1064f…`, `openrouter_api_key = sk-or…`,
+unpacking `adb5ce6-openapifix`: `secret_key = 1064f…`, `llm_api_key = sk-or…`,
 `tavily_api_key = AIzaS…`). `69f2e12` and later are clean — confirmed the same paths are absent from that
 image. Remove the old tags and rotate the values:
 

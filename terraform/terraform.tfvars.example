@@ -15,9 +15,9 @@ postgres_image    = "postgres:16-alpine"
 
 # Application secrets
 secret_key         = "changeme-jwt-signing-key"
-openrouter_api_key = "sk-or-v1-placeholder"
-openrouter_model   = "openrouter/free"
-openrouter_url     = "https://openrouter.ai/api/v1"
+llm_api_key = "sk-or-v1-placeholder"
+llm_model   = "openrouter/free"
+llm_url     = "https://openrouter.ai/api/v1"
 tavily_api_key     = "tvly-placeholder"
 
 # API

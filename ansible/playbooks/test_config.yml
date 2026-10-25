@@ -30,9 +30,9 @@
           - postgres_user is defined
           - postgres_password is defined
           - postgres_db is defined
-          - openrouter_api_key is defined
-          - openrouter_model is defined
-          - openrouter_url is defined
+          - llm_api_key is defined
+          - llm_model is defined
+          - llm_url is defined
           - tavily_api_key is defined
         success_msg: "vault.yml.example defines every secret Terraform requires"
         fail_msg: "vault.yml.example must define all TF_VAR_* inputs used by the app role"

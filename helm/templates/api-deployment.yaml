@@ -53,21 +53,21 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
                   key: SECRET_KEY
-            - name: OPENROUTER_API_KEY
+            - name: LLM_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
-                  key: OPENROUTER_API_KEY
-            - name: OPENROUTER_URL
+                  key: LLM_API_KEY
+            - name: LLM_BASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
-                  key: OPENROUTER_URL
-            - name: OPENROUTER_MODEL
+                  key: LLM_BASE_URL
+            - name: LLM_BASE_MODEL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
-                  key: OPENROUTER_MODEL
+                  key: LLM_BASE_MODEL
             - name: TAVILY_API_KEY
               valueFrom:
                 secretKeyRef:

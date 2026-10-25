@@ -8,9 +8,9 @@ import routers.ai_summary as mod
 
 
 def _configure(monkeypatch):
-    monkeypatch.setattr(mod, "OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(mod, "OPENROUTER_URL", "https://openrouter.test/api/v1")
-    monkeypatch.setattr(mod, "OPENROUTER_MODEL", "test-model")
+    monkeypatch.setattr(mod, "LLM_API_KEY", "test-key")
+    monkeypatch.setattr(mod, "LLM_BASE_URL", "https://openrouter.test/api/v1")
+    monkeypatch.setattr(mod, "LLM_BASE_MODEL", "test-model")
 
 
 def _patch_sleep(monkeypatch):
@@ -59,19 +59,19 @@ class FakeAsyncClient:
 
 def test_error_detail_includes_message():
     r = FakeResponse(429, {"error": {"message": "rate-limited upstream"}})
-    detail = mod._openrouter_error_detail(r)
+    detail = mod._llm_error_detail(r)
     assert detail == "OpenRouter API error (HTTP 429): rate-limited upstream"
 
 
 def test_error_detail_non_json_body():
     r = FakeResponse(502)
-    detail = mod._openrouter_error_detail(r)
+    detail = mod._llm_error_detail(r)
     assert detail == "OpenRouter API error (HTTP 502)."
 
 
 def test_error_detail_json_without_error_key():
     r = FakeResponse(400, {"foo": "bar"})
-    detail = mod._openrouter_error_detail(r)
+    detail = mod._llm_error_detail(r)
     assert detail == "OpenRouter API error (HTTP 400)."
 
 
@@ -137,7 +137,7 @@ def test_summary_missing_stats(monkeypatch):
 
 def test_summary_missing_config(monkeypatch):
     _configure(monkeypatch)
-    monkeypatch.setattr(mod, "OPENROUTER_API_KEY", None)
+    monkeypatch.setattr(mod, "LLM_API_KEY", None)
     with pytest.raises(HTTPException) as exc:
         asyncio.run(mod.ai_summary({"stats": {"deviceCount": 1}}))
     assert exc.value.status_code == 500
