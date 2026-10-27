@@ -88,7 +88,7 @@ export default function Sidebar({setToken,  account}) {
     return (
         <div className='sidebar bg-light border-end p-3' style={{ width: '200px', minHeight: '100vh'}}>
             <h5>Management</h5>
-            <button  className='btn btn-outline-secondary mt-3'
+            <button  className='btn btn-outline-secondary mt-3 mb-3'
                 style={{ cursor: loadingUser ? 'not-allowed' : 'pointer', userSelect: 'none' }}
                 title='Click to modify Account'
                 onClick={loadingUser ? undefined : openEditModal}
