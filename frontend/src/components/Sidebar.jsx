@@ -1,8 +1,9 @@
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import React, { useEffect, useState } from 'react'
 import { useConfig } from '../configContext'
 import axios from '../axios'
 import { useEvents } from '../eventsContext'
+import './Sidebar.css'
 
 export default function Sidebar({setToken,  account}) {
     const { hasUnread, markRead } = useEvents() || {};
@@ -85,7 +86,7 @@ export default function Sidebar({setToken,  account}) {
         setToken(null);
     }
     return (
-        <div className='bg-light border-end p-3' style={{ width: '200px', minHeight: '100vh'}}>
+        <div className='sidebar bg-light border-end p-3' style={{ width: '200px', minHeight: '100vh'}}>
             <h5>Management</h5>
             <button  className='btn btn-outline-secondary mt-3'
                 style={{ cursor: loadingUser ? 'not-allowed' : 'pointer', userSelect: 'none' }}
@@ -94,20 +95,20 @@ export default function Sidebar({setToken,  account}) {
                 >Account: {currentAccount}{loadingUser ? ' (loading...)' : ''}
             </button>
             <ul className='nav flex-column'>
-                <li className='nav-item'><Link className='nav-link' to='/home'>Home</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/news'>News</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/ai/search'>Search Assistant</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/ai/data'>Data Analysis</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/users'>Users</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/roles'>Roles</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/devices'>Devices</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/devicesmap'>Devices Map</Link></li>
-                <li className='nav-item'><Link className='nav-link' to='/events'>Events
+                <li className='nav-item'><NavLink end className='nav-link' to='/home'>Home</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/news'>News</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/ai/search'>Search Assistant</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/ai/data'>Data Analysis</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/users'>Users</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/roles'>Roles</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/devices'>Devices</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/devicesmap'>Devices Map</NavLink></li>
+                <li className='nav-item'><NavLink className='nav-link' to='/events'>Events
                 {hasUnread ? (
                     <span className='ms-2 rounded-circle bg-danger'
                     style={{ width: 8, height: 8, display: 'inline-block' }} />
                 ) : null}
-                </Link></li>
+                </NavLink></li>
                 <li className='nav-item'>
                     <Link className='btn btn-outline-secondary mt-3' to='/' onClick={handleLogout}>Logout</Link></li>
             </ul>

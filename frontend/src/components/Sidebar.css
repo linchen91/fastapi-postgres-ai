@@ -1,0 +1,24 @@
+/* Sidebar nav links */
+
+/* Remove the background highlight the browser keeps on a link after it is clicked
+   (focus state / mobile tap highlight). Keyboard focus indication is preserved. */
+.sidebar .nav-link:focus,
+.sidebar .nav-link:active {
+  background-color: transparent;
+}
+
+.sidebar .nav-link:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.sidebar .nav-link {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Highlight the link of the current page */
+.sidebar .nav-link.active {
+  background-color: rgba(13, 110, 253, 0.12);
+  color: #0d6efd;
+  font-weight: 600;
+}
